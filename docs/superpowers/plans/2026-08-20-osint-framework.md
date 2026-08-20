@@ -1,4 +1,4 @@
-# OSINT Framework Implementation Plan
+# Weaver OSINT Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -10,6 +10,7 @@
 
 ## Global Constraints
 
+- Project name: **Weaver OSINT** (package/url slug `weaver-osint`). Shown in the FastAPI title, frontend `<title>`, app header, README title, `package.json` name, and the HTTP User-Agent (`weaver-osint/0.1`).
 - Python >= 3.12; backend deps pinned in `backend/requirements.txt` (fastapi 0.115.*, uvicorn[standard] 0.30.*, sqlalchemy 2.0.*, httpx 0.27.*, dnspython 2.6.*, idna 3.*, pytest 8.*, pytest-asyncio 0.24.*, respx 0.21.*).
 - Free-only data sources in v1. No paid API keys anywhere. External tools are detected at runtime and skipped (job status `skipped`) with an install hint if missing.
 - Entity types are exactly: `email | username | domain | phone | name | ip`.
@@ -271,7 +272,7 @@ from .core.db import init_db
 
 def create_app() -> FastAPI:
     init_db()
-    return FastAPI(title="OSINT Framework")
+    return FastAPI(title="Weaver OSINT")
 
 
 app = create_app()
@@ -1243,7 +1244,7 @@ git commit -m "feat: correlation rules with entity normalization, merge, and fac
   - `app.pipeline.events.stream(investigation_id: int) -> queue.Queue` — returns the queue for an investigation.
   - `app.pipeline.runner.trigger_scan(investigation_id: int) -> None` — starts a daemon thread running `asyncio.run(run_scan(investigation_id))`; returns immediately.
   - `app.pipeline.runner.run_scan(investigation_id: int) -> None` — sets investigation `running`; for each seed entity × matching collector, skips if a Job with the same `(entity_id, collector_name)` exists in `queued|running|done|partial`; otherwise spawns `run_job`; gathers all; sets investigation `done`; publishes `{"type": "scan_done", "investigation_id": n}`.
-  - `app.pipeline.runner.run_job(investigation_id: int, entity: Entity, collector) -> None` — creates Job `running` (publishes `job_status`); if `collector.requires_external` and `is_available()` is falsy → `skipped` with `collector.install_hint`; runs the collector with a `CollectorContext` using a per-job `httpx.AsyncClient` (timeout from settings, UA `osint-framework/0.1`); applies each fact via `apply_fact`; publishes `{"type": "graph_delta", "fact": {...}}` every 5 facts; sets final status `done` (≥1 result) or `partial` (0 results); exceptions → `failed` with error message; publishes `job_status` on every transition.
+  - `app.pipeline.runner.run_job(investigation_id: int, entity: Entity, collector) -> None` — creates Job `running` (publishes `job_status`); if `collector.requires_external` and `is_available()` is falsy → `skipped` with `collector.install_hint`; runs the collector with a `CollectorContext` using a per-job `httpx.AsyncClient` (timeout from settings, UA `weaver-osint/0.1`); applies each fact via `apply_fact`; publishes `{"type": "graph_delta", "fact": {...}}` every 5 facts; sets final status `done` (≥1 result) or `partial` (0 results); exceptions → `failed` with error message; publishes `job_status` on every transition.
 - Event shapes: `{"type": "job_status", "job": {"id", "collector_name", "status", "result_count", "error_message", "entity": {"type","value"}}}`, `{"type": "graph_delta", "fact": {"source_collector", "relation", "entity_a": {"type","value"}, "entity_b": {"type","value"}|null}}`, `{"type": "scan_done", "investigation_id": int}`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1454,7 +1455,7 @@ async def run_job(investigation_id: int, entity: Entity, collector) -> None:
         async with httpx.AsyncClient(
             timeout=settings.http_timeout,
             follow_redirects=True,
-            headers={"User-Agent": "osint-framework/0.1"},
+            headers={"User-Agent": "weaver-osint/0.1"},
         ) as client:
             ctx = CollectorContext(
                 entity_type=EntityType(entity.type),
@@ -2745,7 +2746,7 @@ Create `frontend/package.json`:
 
 ```json
 {
-  "name": "osint-frontend",
+  "name": "weaver-osint",
   "private": true,
   "type": "module",
   "scripts": {
@@ -2794,7 +2795,7 @@ Create `frontend/index.html`:
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OSINT Framework</title>
+    <title>Weaver OSINT</title>
   </head>
   <body>
     <div id="root"></div>
@@ -2971,7 +2972,7 @@ export function App() {
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: 720, margin: "0 auto", padding: 16 }}>
-      <h1>OSINT Framework</h1>
+      <h1>Weaver OSINT</h1>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <form onSubmit={handleCreate}>
         <input
@@ -3261,7 +3262,7 @@ export function App() {
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: 720, margin: "0 auto", padding: 16 }}>
-      <h1>OSINT Framework</h1>
+      <h1>Weaver OSINT</h1>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <form onSubmit={handleCreate}>
         <input
@@ -3741,7 +3742,7 @@ export function App() {
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: 720, margin: "0 auto", padding: 16 }}>
-      <h1>OSINT Framework</h1>
+      <h1>Weaver OSINT</h1>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <form onSubmit={handleCreate}>
         <input
@@ -3879,7 +3880,7 @@ tests/test.db
 Create `README.md` at repo root:
 
 ```markdown
-# OSINT Framework
+# Weaver OSINT
 
 Single-user local OSINT investigation tool: feed it emails, usernames, domains, or phones; it collects public-source facts via pluggable collectors, correlates them into an evidence-backed entity graph, and shows the graph in a browser.
 

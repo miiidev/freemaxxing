@@ -1,9 +1,11 @@
-# OSINT Framework — Design Spec
+# Weaver OSINT — Design Spec
 
 Date: 2026-08-20
 Status: Approved (design review)
 
 ## 1. Overview
+
+**Project name: Weaver OSINT** (slug `weaver-osint`).
 
 A general-purpose OSINT (Open Source Intelligence) investigation framework with a pluggable collector system, built as a single-user local web application. The user creates an investigation seeded with identifiers (email, username, domain, phone, name); a pipeline of collectors gathers public-source facts; a correlation engine links facts into an entity graph; and a browser UI presents the graph as the front door with per-entity profile drill-down.
 
