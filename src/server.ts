@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
+import { Readable } from "node:stream";
+import { sseModelRewriter } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, RegistryEntry } from "./types.js";
 import type { StateMap } from "./state.js";
@@ -97,10 +99,34 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return json;
     }
 
-    // Placeholder passthrough — Task 9 replaces this branch.
-    reply.header("content-type", "text/event-stream");
-    reply.header("x-freeroll-served-by", servedId);
-    return reply.send(result.response.body);
+    // Streaming: committed to result.servedBy — executor guarantees all
+    // failover happened pre-first-byte. Mid-stream failure => single error
+    // frame, never another model.
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      "x-freeroll-served-by": servedId,
+    });
+
+    const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
+    const rewriter = sseModelRewriter(servedId);
+    rewriter.pipe(reply.raw);
+    upstream.pipe(rewriter);
+    upstream.on("error", () => {
+      if (!reply.raw.writableEnded) {
+        reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+        reply.raw.end();
+      }
+    });
+    rewriter.on("error", () => {
+      if (!reply.raw.writableEnded) reply.raw.end();
+    });
+    await new Promise<void>((resolveDone) => {
+      reply.raw.on("close", () => resolveDone());
+      rewriter.on("close", () => resolveDone());
+    });
+    return reply;
   });
 
   return app;
