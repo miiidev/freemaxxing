@@ -73,9 +73,25 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
     const failure = quirk
       ? quirk.classifyFailure(response.status, parsed, response.headers, Date.now())
       : ({ kind: "outage" } as const);
-    attempts.push({ model: entry.id, reason: failure.kind });
-    recordFailure(args.stateMap, entry.id, failure, provider.resetProfile, Date.now());
+    attempts.push({
+      model: entry.id,
+      reason: `${failure.kind} ${response.status}`,
+      status: response.status,
+      detail: snippet(parsed),
+    });
+    // A deterministic client error says nothing about the model's health —
+    // cooling it down would poison unrelated future requests.
+    if (failure.kind !== "bad_request") {
+      recordFailure(args.stateMap, entry.id, failure, provider.resetProfile, Date.now());
+    }
   }
 
   return { ok: false, attempts };
+}
+
+function snippet(body: unknown): string | undefined {
+  let s = typeof body === "string" ? body : JSON.stringify(body) ?? "";
+  if (!s) return undefined;
+  s = s.replace(/\s+/g, " ").trim();
+  return s.length > 160 ? `${s.slice(0, 160)}…` : s;
 }

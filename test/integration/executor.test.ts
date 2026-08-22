@@ -78,9 +78,41 @@ describe("execute", () => {
 
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.servedBy.id).toBe("groq::b");
-    expect(res.attempts).toEqual([{ model: "groq::a", reason: "quota" }]);
+    expect(res.attempts).toEqual([
+      { model: "groq::a", reason: "quota 429", status: 429, detail: '{"error":{"message":"Rate limit reached on tokens per day (TPD)"}}' },
+    ]);
     expect(stateMap.get("groq::a")?.state).toBe("exhausted");
     expect(loadState(file).get("groq::a")?.state).toBe("exhausted");
+  });
+
+  it("does not cool down models on deterministic client errors (bad_request)", async () => {
+    const fetchImpl = (async (_url: string | URL, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body));
+      return sent.model === "a"
+        ? jsonResponse(400, { error: { message: "max_tokens is too large" } })
+        : jsonResponse(200, { id: "z", choices: [] });
+    }) as unknown as typeof fetch;
+
+    const stateMap = new Map();
+    const res = await execute({
+      candidates: [A, B],
+      providers: { groq: P_GROQ },
+      body: { messages: [] },
+      stateMap,
+      fetchImpl,
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.servedBy.id).toBe("groq::b");
+    expect(res.attempts).toEqual([
+      {
+        model: "groq::a",
+        reason: "bad_request 400",
+        status: 400,
+        detail: '{"error":{"message":"max_tokens is too large"}}',
+      },
+    ]);
+    expect(stateMap.has("groq::a")).toBe(false);
   });
 
   it("returns ok:false with attempt reasons when everything fails", async () => {
@@ -95,8 +127,8 @@ describe("execute", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.attempts).toEqual([
-        { model: "groq::a", reason: "outage" },
-        { model: "groq::b", reason: "outage" },
+        { model: "groq::a", reason: "outage 500", status: 500, detail: '{"oops":true}' },
+        { model: "groq::b", reason: "outage 500", status: 500, detail: '{"oops":true}' },
       ]);
     }
   });

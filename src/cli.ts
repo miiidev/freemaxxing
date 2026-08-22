@@ -5,7 +5,7 @@ import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
 } from "./config.js";
-import { loadState, effective } from "./state.js";
+import { loadState, effective, bindStateFile } from "./state.js";
 import type { ModelState, RegistryEntry } from "./types.js";
 
 export function formatStatusRow(e: RegistryEntry, msRaw: ModelState, now: number): string {
@@ -29,12 +29,31 @@ export function formatStatusRow(e: RegistryEntry, msRaw: ModelState, now: number
   ].join("  ");
 }
 
+export function noProvidersHint(): string[] {
+  return [
+    "No provider API keys were found, so every request will fail.",
+    "Fix by doing ONE of:",
+    '  1. Set a key in this shell (session-only):   $env:GROQ_API_KEY = "gsk_..."   <- PowerShell',
+    "                                               set GROQ_API_KEY=gsk_...          <- cmd.exe",
+    "  2. Persist it across sessions: create a file at ~/.freeroll/.env containing one key per line,",
+    "     e.g.  GROQ_API_KEY=gsk_...",
+    "     Recognized names: OPENROUTER_API_KEY GROQ_API_KEY GEMINI_API_KEY MISTRAL_API_KEY CEREBRAS_API_KEY",
+    "Note: in PowerShell, `set NAME=value` does NOT create an environment variable - use $env:NAME = value.",
+  ];
+}
+
 async function printStatus(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
   const providers = activeProviders(cfg, env);
   const states = loadState(defaultStatePath());
-  console.log(`freeroll status - ${Object.keys(providers).length}/6 providers have keys`);
+  const providerCount = Object.keys(providers).length;
+  console.log(`freeroll status - ${providerCount}/6 providers have keys`);
+  if (providerCount === 0) {
+    console.log("");
+    for (const line of noProvidersHint()) console.log(line);
+    return;
+  }
   console.log("");
   for (const entry of REGISTRY) {
     if (!providers[entry.provider]) continue;
@@ -54,6 +73,7 @@ export async function runCli(argv: string[]): Promise<number> {
     const cfg = loadConfig(defaultConfigPath());
     const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
     const providers = activeProviders(cfg, env);
+    bindStateFile(defaultStatePath()); // spec 4.6: cooldowns/exhaustion survive restarts
     const app = buildServer({
       config: cfg,
       providers,
@@ -62,9 +82,13 @@ export async function runCli(argv: string[]): Promise<number> {
       stateMap: loadState(defaultStatePath()),
     });
     await app.listen({ port: cfg.port, host: cfg.host });
+    const providerCount = Object.keys(providers).length;
     console.log(
-      `freeroll serving ${Object.keys(providers).length}/6 providers on http://${cfg.host}:${cfg.port}/v1`,
+      `freeroll serving ${providerCount}/6 providers on http://${cfg.host}:${cfg.port}/v1`,
     );
+    if (providerCount === 0) {
+      for (const line of noProvidersHint()) console.log(line);
+    }
     return new Promise<number>(() => {
       // server runs until killed
     });

@@ -84,3 +84,19 @@ describe("retry-after is authoritative", () => {
       .toEqual({ kind: "rate", retryAfterMs: 11000 });
   });
 });
+
+describe("client errors are deterministic, not rate limits", () => {
+  it.each(Object.keys(QUIRKS))("%s: 400 -> bad_request", (name) => {
+    expect(QUIRKS[name].classifyFailure(400, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
+  });
+  it.each(Object.keys(QUIRKS))("%s: 404 -> bad_request", (name) => {
+    expect(QUIRKS[name].classifyFailure(404, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
+  });
+  it.each(Object.keys(QUIRKS))("%s: 422 -> bad_request", (name) => {
+    expect(QUIRKS[name].classifyFailure(422, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
+  });
+  it.each(Object.keys(QUIRKS))("%s: retry-after does NOT override a client error", (name) => {
+    expect(QUIRKS[name].classifyFailure(400, {}, H({ "retry-after": "5" }), NOW))
+      .toEqual({ kind: "bad_request" });
+  });
+});

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { buildServer } from "../../src/server.js";
 import type { AppConfig, ActiveProvider } from "../../src/config.js";
 import { REGISTRY } from "../../src/catalog.js";
@@ -100,6 +100,6 @@ describe("POST /v1/chat/completions", () => {
     const groqAttempt = errBody.attempts.find((a: { model: string }) => a.model.startsWith("groq::"));
     expect(groqAttempt).toBeTruthy();
     expect(groqAttempt.model).toMatch(/^groq::/);
-    expect(groqAttempt.reason).toBe("rate");
+    expect(groqAttempt.reason).toBe("rate 429");
   });
 });

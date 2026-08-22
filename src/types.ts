@@ -1,6 +1,6 @@
 export type Speed = "fast" | "medium" | "slow";
 
-export type FailureKind = "rate" | "quota" | "outage";
+export type FailureKind = "rate" | "quota" | "outage" | "bad_request";
 
 export interface Failure {
   kind: FailureKind;
@@ -37,6 +37,8 @@ export type ModelState =
 export interface AttemptRecord {
   model: string;
   reason: string;
+  status?: number;
+  detail?: string;
 }
 
 export interface AliasDef {

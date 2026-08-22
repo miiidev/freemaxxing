@@ -7,6 +7,12 @@ export interface Quirk {
 const RATE_60S: Failure = { kind: "rate", retryAfterMs: 60_000 };
 const QUOTA: Failure = { kind: "quota" };
 const OUTAGE: Failure = { kind: "outage" };
+const BAD_REQUEST: Failure = { kind: "bad_request" };
+
+// Deterministic client errors: the REQUEST is at fault, not the model or
+// provider — retrying the same request elsewhere may work, but cooling this
+// model down would be wrong, and treating it as transient masks the cause.
+const CLIENT_ERROR_STATUSES = new Set([400, 404, 405, 409, 413, 422]);
 
 function bodyStr(body: unknown): string {
   try {
@@ -29,10 +35,13 @@ function retryAfterHeader(headers: Headers, now: number): number | undefined {
   return Number.isNaN(dateMs) ? undefined : Math.max(0, dateMs - now);
 }
 
-// Shared rules consulted BEFORE provider-specific heuristics: status >= 500 -> outage,
-// and a Retry-After header is authoritative — it beats every provider body heuristic.
+// Shared rules consulted BEFORE provider-specific heuristics, in order:
+// status >= 500 -> outage; deterministic client errors -> bad_request (a
+// Retry-After header does not rescue these — the request is at fault);
+// only then a Retry-After header is honored as an authoritative rate limit.
 function base(status: number, body: unknown, headers: Headers, now: number): Failure | null {
   if (status >= 500) return OUTAGE;
+  if (CLIENT_ERROR_STATUSES.has(status)) return BAD_REQUEST;
   const ra = retryAfterHeader(headers, now);
   if (ra !== undefined) return { kind: "rate", retryAfterMs: ra };
   return null;
