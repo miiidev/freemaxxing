@@ -29,7 +29,8 @@ function retryAfterHeader(headers: Headers, now: number): number | undefined {
   return Number.isNaN(dateMs) ? undefined : Math.max(0, dateMs - now);
 }
 
-// Shared fallback logic. Retry-After is authoritative and beats body heuristics.
+// Shared rules consulted BEFORE provider-specific heuristics: status >= 500 -> outage,
+// and a Retry-After header is authoritative — it beats every provider body heuristic.
 function base(status: number, body: unknown, headers: Headers, now: number): Failure | null {
   if (status >= 500) return OUTAGE;
   const ra = retryAfterHeader(headers, now);
@@ -39,21 +40,27 @@ function base(status: number, body: unknown, headers: Headers, now: number): Fai
 
 const openrouter: Quirk = {
   classifyFailure(status, body, headers, now) {
+    const shared = base(status, body, headers, now);
+    if (shared) return shared;
     if (status === 402) return QUOTA;
     if (status === 429 && matches(body, /free-model|exceeded free/i)) return QUOTA;
-    return base(status, body, headers, now) ?? RATE_60S;
+    return RATE_60S;
   },
 };
 
 const groq: Quirk = {
   classifyFailure(status, body, headers, now) {
+    const shared = base(status, body, headers, now);
+    if (shared) return shared;
     if (status === 429 && matches(body, /tokens per day|\btpd\b/i)) return QUOTA;
-    return base(status, body, headers, now) ?? RATE_60S;
+    return RATE_60S;
   },
 };
 
 const google: Quirk = {
   classifyFailure(status, body, headers, now) {
+    const shared = base(status, body, headers, now);
+    if (shared) return shared;
     if (status === 429) {
       const details = (body as { error?: { details?: Array<{ retryDelay?: string }> } })
         ?.error?.details;
@@ -64,14 +71,16 @@ const google: Quirk = {
       }
       return QUOTA;
     }
-    return base(status, body, headers, now) ?? RATE_60S;
+    return RATE_60S;
   },
 };
 
 const mistral: Quirk = {
   classifyFailure(status, body, headers, now) {
+    const shared = base(status, body, headers, now);
+    if (shared) return shared;
     if (status === 429 && matches(body, /quota|monthly/i)) return QUOTA;
-    return base(status, body, headers, now) ?? RATE_60S;
+    return RATE_60S;
   },
 };
 

@@ -64,3 +64,23 @@ describe("github", () => {
       .toEqual({ kind: "rate", retryAfterMs: 45_000 });
   });
 });
+
+describe("retry-after is authoritative", () => {
+  const NOW2 = Date.UTC(2026, 7, 22, 12, 0, 0);
+  it("openrouter: retry-after beats free-model body", () => {
+    expect(QUIRKS["openrouter"].classifyFailure(429, { error: { message: "free-model-exhausted" } }, H({ "retry-after": "5" }), NOW2))
+      .toEqual({ kind: "rate", retryAfterMs: 5000 });
+  });
+  it("groq: retry-after beats TPD body", () => {
+    expect(QUIRKS["groq"].classifyFailure(429, { error: { message: "tokens per day (TPD)" } }, H({ "retry-after": "7" }), NOW2))
+      .toEqual({ kind: "rate", retryAfterMs: 7000 });
+  });
+  it("mistral: retry-after beats quota wording", () => {
+    expect(QUIRKS["mistral"].classifyFailure(429, { message: "monthly quota exceeded" }, H({ "retry-after": "9" }), NOW2))
+      .toEqual({ kind: "rate", retryAfterMs: 9000 });
+  });
+  it("google: retry-after beats RESOURCE_EXHAUSTED-without-delay", () => {
+    expect(QUIRKS["google"].classifyFailure(429, { error: { status: "RESOURCE_EXHAUSTED" } }, H({ "retry-after": "11" }), NOW2))
+      .toEqual({ kind: "rate", retryAfterMs: 11000 });
+  });
+});
