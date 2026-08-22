@@ -1,0 +1,21 @@
+{
+  "name": "freeroll",
+  "version": "0.1.0",
+  "description": "No entry fee, real winnings - every free AI model, one endpoint.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "freeroll": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "start": "npm run build && node dist/cli.js serve"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}
