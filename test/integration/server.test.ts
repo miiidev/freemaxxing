@@ -31,7 +31,7 @@ describe("GET /v1/models", () => {
     expect(res.statusCode).toBe(200);
     expect(body.object).toBe("list");
     expect(body.data.find((m: { id: string }) => m.id === "auto/coding").freeroll_alias).toBe(true);
-    expect(body.data.some((m: { id: string }) => m.id === "groq::llama-3.3-70b-versatile")).toBe(true);
+    expect(body.data.some((m: { id: string }) => m.id === "groq::openai/gpt-oss-120b")).toBe(true);
   });
 });
 
