@@ -2,7 +2,6 @@
   { "id": "openrouter::deepseek/deepseek-chat-v3-0324:free", "provider": "openrouter", "upstream": "deepseek/deepseek-chat-v3-0324:free", "tags": ["coding", "chat"], "tier": 1, "speed": "medium", "context": 64000, "tools": true },
   { "id": "openrouter::qwen/qwen-2.5-coder-32b-instruct:free", "provider": "openrouter", "upstream": "qwen/qwen-2.5-coder-32b-instruct:free", "tags": ["coding"], "tier": 1, "speed": "fast", "context": 32000, "tools": true },
   { "id": "openrouter::moonshotai/kimi-k2:free", "provider": "openrouter", "upstream": "moonshotai/kimi-k2:free", "tags": ["coding", "chat", "long-context"], "tier": 2, "speed": "slow", "context": 128000, "tools": true },
-  { "id": "openrouter::deepseek/deepseek-r1:free", "provider": "openrouter", "upstream": "deepseek/deepseek-r1:free", "tags": ["coding", "chat"], "tier": 2, "speed": "slow", "context": 64000, "tools": false },
   { "id": "openrouter::meta-llama/llama-3.3-70b-instruct:free", "provider": "openrouter", "upstream": "meta-llama/llama-3.3-70b-instruct:free", "tags": ["chat"], "tier": 3, "speed": "medium", "context": 64000, "tools": true },
   { "id": "openrouter::google/gemini-2.0-flash-exp:free", "provider": "openrouter", "upstream": "google/gemini-2.0-flash-exp:free", "tags": ["chat", "fast", "vision", "long-context"], "tier": 3, "speed": "fast", "context": 1000000, "tools": true },
   { "id": "openrouter::z-ai/glm-5.2:free", "provider": "openrouter", "upstream": "z-ai/glm-5.2:free", "tags": ["coding", "chat", "long-context"], "tier": 3, "speed": "medium", "context": 256000, "tools": true },
