@@ -33,3 +33,15 @@ ships a successor endpoint.
 | `pixtral-12b-2409` | mistral | Retired 12/31/2025 |
 | `qwen-3-coder-480b` | cerebras | Not offered by Cerebras |
 | `gemma-3-27b-it` | google | Verification page unreachable at curation time; skipped rather than added unverified |
+
+## OpenRouter curation decisions (2026-08-22)
+
+Verified against https://openrouter.ai/api/v1/models on 2026-08-22
+(421 models total; zero `:free` variants of any candidate family present).
+
+| Candidate | Observation | Decision |
+|---|---|---|
+| `qwen/qwen3-coder:free` | Not present in /api/v1/models response at $0 price; only paid variants exist (`qwen/qwen3-coder`, `qwen/qwen3-coder-next`, `qwen/qwen3-coder-flash`, `qwen/qwen3-coder-plus`, `qwen/qwen3-coder-30b-a3b-instruct`) | Skip |
+| `mistralai/mistral-small-3.1-24b-instruct:free` | Not present at $0 price; only paid `mistralai/mistral-small-3.1-24b-instruct` exists | Skip |
+| `z-ai/glm-4.5-air:free` | Not present at $0 price; only paid `z-ai/glm-4.5-air` exists; closest live free relative is `z-ai/glm-5.2:free`, already in registry | Skip (covered by `z-ai/glm-5.2:free`) |
+| `deepseek/deepseek-r1:free` | Gone from /api/v1/models response; only paid `deepseek/deepseek-r1` and `deepseek/deepseek-r1-0528` remain | Remove in next curation pass (still in registry as `openrouter::deepseek/deepseek-r1:free`; dead id) |
