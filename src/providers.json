@@ -1,0 +1,38 @@
+{
+  "openrouter": {
+    "baseURL": "https://openrouter.ai/api/v1",
+    "auth": "bearer",
+    "quirks": "openrouter",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  },
+  "groq": {
+    "baseURL": "https://api.groq.com/openai/v1",
+    "auth": "bearer",
+    "quirks": "groq",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  },
+  "google": {
+    "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "auth": "bearer",
+    "quirks": "google",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  },
+  "mistral": {
+    "baseURL": "https://api.mistral.ai/v1",
+    "auth": "bearer",
+    "quirks": "mistral",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  },
+  "github": {
+    "baseURL": "https://models.github.ai/inference",
+    "auth": "bearer",
+    "quirks": "github",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  },
+  "cerebras": {
+    "baseURL": "https://api.cerebras.ai/v1",
+    "auth": "bearer",
+    "quirks": "cerebras",
+    "resetProfile": { "kind": "daily-utc-midnight" }
+  }
+}
