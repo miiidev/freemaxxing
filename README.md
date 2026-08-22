@@ -3,7 +3,7 @@
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
 Freeroll is a local OpenAI-compatible proxy that pools curated **free-tier AI
-models** (OpenRouter, Groq, Google AI Studio, Mistral, GitHub Models, Cerebras)
+models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras)
 behind stable aliases. When one model hits its rate limit, your request
 transparently fails over to the next-best free model.
 
@@ -37,6 +37,7 @@ Define custom aliases in `~/.freeroll/config.json`:
 Keys are read from environment variables (a `.env` in `~/.freeroll/` is loaded):
 `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
 `GITHUB_TOKEN`, `CEREBRAS_API_KEY`. Providers without keys are skipped.
+(`GITHUB_TOKEN` is accepted but inert: GitHub Models was retired in July 2026 — see docs/registry-notes.md.)
 Port/host are configurable in `~/.freeroll/config.json`.
 
 ## Status
