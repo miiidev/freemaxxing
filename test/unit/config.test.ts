@@ -18,6 +18,15 @@ describe("loadEnv", () => {
     const merged = loadEnv("/nonexistent/.env", { A: "from-process" });
     expect(merged.A).toBe("from-process");
   });
+
+  it("file value yields to real env when the file exists", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-env-"));
+    const file = path.join(dir, ".env");
+    fs.writeFileSync(file, "A=from-file\nB=only-in-file\n");
+    const merged = loadEnv(file, { A: "from-process" });
+    expect(merged.A).toBe("from-process");
+    expect(merged.B).toBe("only-in-file");
+  });
 });
 
 describe("loadConfig", () => {
