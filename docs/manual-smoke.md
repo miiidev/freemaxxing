@@ -1,0 +1,21 @@
+# Manual smoke checklist (run before calling any release done)
+
+Prereq: valid keys for all six providers exported in the shell or ~/.freeroll/.env.
+
+1. `npm run build && node dist/cli.js serve`
+   - Expect banner: `freeroll serving 6/6 providers on http://127.0.0.1:8787/v1`
+2. `node dist/cli.js status`
+   - Expect one row per registry entry for keyed providers; all `ok`.
+3. Non-streaming happy path:
+   curl http://127.0.0.1:8787/v1/chat/completions -H "content-type: application/json" ^
+     -d "{\"model\":\"auto/coding\",\"messages\":[{\"role\":\"user\",\"content\":\"say hi in 3 words\"}]}"
+   - Expect 200 JSON, `model` starts with `<provider>::`, header `x-freeroll-served-by` present.
+4. Streaming happy path: same body + `"stream":true`
+   - Expect SSE frames, each frame's `model` field rewritten to served id, final `data: [DONE]`.
+5. Failover drill: exhaust one provider deliberately (tiny daily-limit provider first),
+   re-run step 3 repeatedly until the log shows `tried=<id>(quota)` and a different
+   provider serves. Then `node dist/cli.js status` shows the exhausted row.
+6. Restart persistence: restart the server, confirm step 5's exhausted model is still
+   skipped (state snapshot survived) and recovers after UTC midnight.
+7. Unknown alias returns 404 shape; missing messages returns 400 shape.
+8. Confirm no log line ever contains an API key value.
