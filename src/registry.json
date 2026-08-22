@@ -13,7 +13,6 @@
   { "id": "openrouter::cohere/north-mini-code:free", "provider": "openrouter", "upstream": "cohere/north-mini-code:free", "tags": ["coding"], "tier": 3, "speed": "medium", "context": 256000, "tools": true },
   { "id": "groq::openai/gpt-oss-120b", "provider": "groq", "upstream": "openai/gpt-oss-120b", "tags": ["coding", "chat"], "tier": 2, "speed": "fast", "context": 131072, "tools": true },
   { "id": "groq::openai/gpt-oss-20b", "provider": "groq", "upstream": "openai/gpt-oss-20b", "tags": ["coding", "chat", "fast"], "tier": 2, "speed": "fast", "context": 131072, "tools": true },
-  { "id": "groq::llama-3.3-70b-versatile", "provider": "groq", "upstream": "llama-3.3-70b-versatile", "tags": ["coding", "chat"], "tier": 2, "speed": "fast", "context": 128000, "tools": true },
   { "id": "groq::llama-3.1-8b-instant", "provider": "groq", "upstream": "llama-3.1-8b-instant", "tags": ["fast", "chat"], "tier": 4, "speed": "fast", "context": 128000, "tools": true },
   { "id": "groq::qwen/qwen3.6-27b", "provider": "groq", "upstream": "qwen/qwen3.6-27b", "tags": ["coding", "chat"], "tier": 3, "speed": "medium", "context": 131072, "tools": true },
   { "id": "google::gemini-2.5-pro", "provider": "google", "upstream": "gemini-2.5-pro", "tags": ["coding", "long-context"], "tier": 1, "speed": "slow", "context": 1048576, "tools": true },

@@ -45,3 +45,25 @@ Verified against https://openrouter.ai/api/v1/models on 2026-08-22
 | `mistralai/mistral-small-3.1-24b-instruct:free` | Not present at $0 price; only paid `mistralai/mistral-small-3.1-24b-instruct` exists | Skip |
 | `z-ai/glm-4.5-air:free` | Not present at $0 price; only paid `z-ai/glm-4.5-air` exists; closest live free relative is `z-ai/glm-5.2:free`, already in registry | Skip (covered by `z-ai/glm-5.2:free`) |
 | `deepseek/deepseek-r1:free` | Gone from /api/v1/models response; only paid `deepseek/deepseek-r1` and `deepseek/deepseek-r1-0528` remain | Removed from registry in this pass (was seed entry) |
+
+## Removed: groq::llama-3.3-70b-versatile (2026-08-22)
+
+Groq returns 404 for this id:
+
+    {"error":{"message":"The model \llama-3.3-70b-versatile\ does not exist
+    or you do not have access to it.","type":"invalid_request_error",
+    "code":"model_not_found"}}
+
+It failed every request observed today while other Groq models served.
+Unverified but still listed: groq::llama-3.1-8b-instant — recheck on next
+curation pass.
+
+## Known operational constraint (2026-08-22): Groq free-org request caps
+
+With a single free Groq key, agent-sized requests (~8-12K prompt tokens from
+opencode-style clients) are rejected with HTTP 413 "Request too large for
+model ... in organization ..." even at small max_tokens, across gpt-oss and
+qwen models. Tiny probes (<200 token prompts) succeed. The practical floor
+for reliable opencode/agent traffic is a provider without such tight org-level
+request caps (e.g., OpenRouter :free) or multiple provider keys so the router
+has alternatives when Groq bounces large payloads.
