@@ -35,6 +35,7 @@ describe("loadConfig", () => {
     expect(cfg.port).toBe(8787);
     expect(cfg.host).toBe("127.0.0.1");
     expect(cfg.providers["groq"].apiKeyEnv).toBe("GROQ_API_KEY");
+    expect(cfg.annotateResponses).toBe(true);
   });
 
   it("merges user overrides over defaults", () => {
@@ -47,6 +48,13 @@ describe("loadConfig", () => {
     expect(cfg.port).toBe(9999);
     expect(cfg.providers["groq"].apiKeyEnv).toBe("MY_KEY");
     expect(cfg.providers["openrouter"].apiKeyEnv).toBe("OPENROUTER_API_KEY");
+  });
+
+  it("annotateResponses default true, explicit false honored", () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-cfg-")), "config.json");
+    fs.writeFileSync(file, JSON.stringify({ annotateResponses: false }));
+    const cfg = loadConfig(file);
+    expect(cfg.annotateResponses).toBe(false);
   });
 });
 

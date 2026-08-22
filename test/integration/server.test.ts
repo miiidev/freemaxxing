@@ -7,6 +7,7 @@ import { BUILT_IN_ALIASES } from "../../src/router.js";
 const CFG: AppConfig = {
   port: 8787, host: "127.0.0.1", aliases: {},
   providers: { groq: { apiKeyEnv: "GROQ_API_KEY" } },
+  annotateResponses: true,
 };
 const PROV: Record<string, ActiveProvider> = {
   groq: {
@@ -101,5 +102,41 @@ describe("POST /v1/chat/completions", () => {
     expect(groqAttempt).toBeTruthy();
     expect(groqAttempt.model).toMatch(/^groq::/);
     expect(groqAttempt.reason).toBe("rate 429");
+  });
+
+  it("non-streaming success content ends with served-by annotation", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ id: "x", model: "upstream", choices: [{ message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+    const app = makeServer(fetchImpl);
+    const res = await app.inject({
+      method: "POST", url: "/v1/chat/completions",
+      payload: { model: "auto/fast", messages: [{ role: "user", content: "hello" }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.choices[0].message.content).toMatch(/\n\n---\n\*freeroll: groq::/);
+  });
+
+  it("non-streaming with annotateResponses=false leaves content untouched", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ id: "x", model: "upstream", choices: [{ message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+    const app = buildServer({
+      config: { ...CFG, annotateResponses: false },
+      providers: PROV, aliases: BUILT_IN_ALIASES,
+      registry: REGISTRY, stateMap: new Map(), fetchImpl,
+    });
+    const res = await app.inject({
+      method: "POST", url: "/v1/chat/completions",
+      payload: { model: "auto/fast", messages: [{ role: "user", content: "hello" }] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.choices[0].message.content).toBe("Hello!");
   });
 });

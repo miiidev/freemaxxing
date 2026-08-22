@@ -10,6 +10,7 @@ export interface AppConfig {
   host: string;
   aliases: Record<string, AliasDef>;
   providers: Record<string, { apiKeyEnv: string }>;
+  annotateResponses: boolean;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -66,6 +67,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     port: 8787,
     host: "127.0.0.1",
     aliases: {},
+    annotateResponses: true,
     providers: Object.fromEntries(
       Object.entries(DEFAULT_ENV_KEYS).map(([name, envKey]) => [name, { apiKeyEnv: envKey }]),
     ),
@@ -74,6 +76,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<AppConfig>;
     if (typeof raw.port === "number") cfg.port = raw.port;
     if (typeof raw.host === "string") cfg.host = raw.host;
+    if (typeof raw.annotateResponses === "boolean") cfg.annotateResponses = raw.annotateResponses;
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
   }

@@ -3,7 +3,7 @@ import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
 import { Readable } from "node:stream";
-import { sseModelRewriter } from "./sse.js";
+import { sseModelRewriter, sseAnnotator } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, RegistryEntry } from "./types.js";
 import type { StateMap } from "./state.js";
@@ -96,6 +96,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       const json = (await result.response.json()) as Record<string, unknown>;
       json.model = servedId;
       reply.header("x-freeroll-served-by", servedId);
+      if (deps.config.annotateResponses) {
+        const choices = json.choices as Array<Record<string, unknown>> | undefined;
+        const choice0 = choices?.[0];
+        const message = choice0?.message as Record<string, unknown> | undefined;
+        if (choice0?.finish_reason === "stop" && typeof message?.content === "string") {
+          message.content += `\n\n---\n*freeroll: ${servedId}*`;
+        }
+      }
       return json;
     }
 
@@ -111,21 +119,45 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
     const rewriter = sseModelRewriter(servedId);
-    rewriter.pipe(reply.raw);
-    upstream.pipe(rewriter);
-    upstream.on("error", () => {
-      if (!reply.raw.writableEnded) {
-        reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
-        reply.raw.end();
-      }
-    });
-    rewriter.on("error", () => {
-      if (!reply.raw.writableEnded) reply.raw.end();
-    });
-    await new Promise<void>((resolveDone) => {
-      reply.raw.on("close", () => resolveDone());
-      rewriter.on("close", () => resolveDone());
-    });
+
+    if (deps.config.annotateResponses) {
+      const annotator = sseAnnotator(servedId);
+      annotator.pipe(reply.raw);
+      rewriter.pipe(annotator);
+      upstream.pipe(rewriter);
+      upstream.on("error", () => {
+        if (!reply.raw.writableEnded) {
+          reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+          reply.raw.end();
+        }
+      });
+      rewriter.on("error", () => {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      });
+      annotator.on("error", () => {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      });
+      await new Promise<void>((resolveDone) => {
+        reply.raw.on("close", () => resolveDone());
+        annotator.on("close", () => resolveDone());
+      });
+    } else {
+      rewriter.pipe(reply.raw);
+      upstream.pipe(rewriter);
+      upstream.on("error", () => {
+        if (!reply.raw.writableEnded) {
+          reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+          reply.raw.end();
+        }
+      });
+      rewriter.on("error", () => {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      });
+      await new Promise<void>((resolveDone) => {
+        reply.raw.on("close", () => resolveDone());
+        rewriter.on("close", () => resolveDone());
+      });
+    }
     return reply;
   });
 
