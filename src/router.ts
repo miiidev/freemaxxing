@@ -105,7 +105,7 @@ export function resolve(
     if (!harvest) return 0;
     const hasCaps = Boolean(e.limits || ctx.getProviderCaps?.(e.provider));
     // provCapsOf must run BEFORE reading provCache — it populates the cache.
-    const caps = hasCaps ? provCapsOf(e) : undefined;
+    if (hasCaps) provCapsOf(e);
     return usedFraction(
       {
         rec: ctx.getUsage?.(e.id),
