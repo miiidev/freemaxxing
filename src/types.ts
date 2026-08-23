@@ -52,3 +52,17 @@ export interface RequestCtx {
   hasTools: boolean;
   estTokens: number;
 }
+
+export interface DailyCaps {
+  rpd?: number;
+  tpd?: number;
+}
+
+export interface UsageRecord {
+  day: string; // "YYYY-MM-DD" (UTC) this record belongs to
+  requests: number;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+export type UsageMap = Map<string, UsageRecord>;
