@@ -1,11 +1,13 @@
 import { pathToFileURL } from "node:url";
 import { buildServer } from "./server.js";
-import { REGISTRY } from "./catalog.js";
+import { REGISTRY, applyModelLimits } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
+  defaultUsagePath, mergedProviderCaps,
 } from "./config.js";
 import { loadState, effective, bindStateFile } from "./state.js";
+import { bindUsageFile, loadUsage } from "./usage.js";
 import type { ModelState, RegistryEntry } from "./types.js";
 
 export function formatStatusRow(e: RegistryEntry, msRaw: ModelState, now: number): string {
@@ -55,7 +57,7 @@ async function printStatus(): Promise<void> {
     return;
   }
   console.log("");
-  for (const entry of REGISTRY) {
+  for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
     if (!providers[entry.provider]) continue;
     console.log(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, Date.now()));
   }
@@ -74,12 +76,15 @@ export async function runCli(argv: string[]): Promise<number> {
     const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
     const providers = activeProviders(cfg, env);
     bindStateFile(defaultStatePath()); // spec 4.6: cooldowns/exhaustion survive restarts
+    bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
     const app = buildServer({
       config: cfg,
       providers,
       aliases: mergedAliases(cfg),
-      registry: REGISTRY,
+      registry: applyModelLimits(REGISTRY, cfg.modelLimits),
       stateMap: loadState(defaultStatePath()),
+      usageMap: loadUsage(defaultUsagePath()),
+      providerCaps: mergedProviderCaps(cfg),
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;

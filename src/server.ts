@@ -2,10 +2,11 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
+import { aggregateProvider, maybeExhaust, recordUsage } from "./usage.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
-import type { AliasDef, RegistryEntry } from "./types.js";
+import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
 
 export interface ServerDeps {
@@ -15,6 +16,8 @@ export interface ServerDeps {
   registry: RegistryEntry[];
   stateMap: StateMap;
   fetchImpl?: typeof fetch;
+  usageMap?: UsageMap;
+  providerCaps?: Record<string, DailyCaps>;
 }
 
 function err(type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -24,6 +27,8 @@ function err(type: string, message: string, extra: Record<string, unknown> = {})
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   let reqCounter = 0;
+  const usageMap = deps.usageMap ?? new Map<string, UsageRecord>();
+  const providerCaps = deps.providerCaps ?? {};
 
   app.get("/v1/models", async () => {
     const aliasData = Object.keys(deps.aliases).map((alias) => ({
@@ -54,23 +59,46 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return ms;
     };
 
-    let candidates: RegistryEntry[];
+    const estTokens = estimateTokens(body);
+    let resolved: ReturnType<typeof resolve>;
     try {
-      candidates = resolve(
+      resolved = resolve(
         alias,
         deps.aliases,
         deps.registry,
         liveState,
         {
           hasTools: Array.isArray(body.tools) && body.tools.length > 0,
-          estTokens: estimateTokens(body),
+          estTokens,
+          harvest: deps.config.harvest === true,
+          getUsage: (id) => usageMap.get(id),
+          getProviderCaps: (p) => providerCaps[p],
+          now: Date.now(),
         },
-      ).candidates;
+      );
     } catch (e) {
       if (e instanceof UnknownAliasError) {
         return reply.code(404).send(err("unknown_alias", e.message));
       }
       throw e;
+    }
+    const candidates = resolved.candidates;
+
+    // Per-request closure: records the served call, then flags the model
+    // exhausted proactively if its (or its provider's) budget is now spent.
+    function recordServed(entry: RegistryEntry, real?: { tokensIn: number; tokensOut: number }) {
+      const now = Date.now();
+      recordUsage(usageMap, entry.id, {
+        requests: 1,
+        tokensIn: real?.tokensIn ?? estTokens,
+        tokensOut: real?.tokensOut ?? 0,
+      }, now);
+      maybeExhaust(deps.stateMap, entry.id, {
+        rec: usageMap.get(entry.id),
+        modelCaps: entry.limits,
+        provTotals: aggregateProvider(usageMap, entry.provider),
+        provCaps: providerCaps[entry.provider],
+      }, now);
     }
 
     const result = await execute({
@@ -85,6 +113,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return reply.code(503).send(
         err("all_models_exhausted", `No free model available for ${alias} right now.`, {
           attempts: result.attempts,
+          skippedByBudget: resolved.skippedByBudget.map((e) => e.id),
         }),
       );
     }
@@ -95,6 +124,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     if (body.stream !== true) {
       const json = (await result.response.json()) as Record<string, unknown>;
       json.model = servedId;
+      const u = json.usage as Record<string, unknown> | undefined;
+      const num = (v: unknown) => (typeof v === "number" ? v : undefined);
+      recordServed(result.servedBy, {
+        tokensIn: num(u?.prompt_tokens) ?? num(u?.total_tokens) ?? estTokens,
+        tokensOut: num(u?.completion_tokens) ?? 0,
+      });
       reply.header("x-freeroll-served-by", servedId);
       if (deps.config.annotateResponses) {
         const choices = json.choices as Array<Record<string, unknown>> | undefined;

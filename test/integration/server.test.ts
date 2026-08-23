@@ -1,13 +1,19 @@
 ﻿import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { buildServer } from "../../src/server.js";
 import type { AppConfig, ActiveProvider } from "../../src/config.js";
 import { REGISTRY } from "../../src/catalog.js";
 import { BUILT_IN_ALIASES } from "../../src/router.js";
+import { loadUsage, bindUsageFile, utcDayKey } from "../../src/usage.js";
+import type { DailyCaps, RegistryEntry, UsageMap } from "../../src/types.js";
 
 const CFG: AppConfig = {
   port: 8787, host: "127.0.0.1", aliases: {},
   providers: { groq: { apiKeyEnv: "GROQ_API_KEY" } },
   annotateResponses: true,
+  harvest: true,
 };
 const PROV: Record<string, ActiveProvider> = {
   groq: {
@@ -16,10 +22,14 @@ const PROV: Record<string, ActiveProvider> = {
   },
 };
 
-function makeServer(fetchImpl?: typeof fetch) {
+function makeServer(
+  fetchImpl?: typeof fetch,
+  opts?: { usageMap?: UsageMap; providerCaps?: Record<string, DailyCaps>; registry?: RegistryEntry[] },
+) {
   return buildServer({
     config: CFG, providers: PROV, aliases: BUILT_IN_ALIASES,
-    registry: REGISTRY, stateMap: new Map(), fetchImpl,
+    registry: opts?.registry ?? REGISTRY, stateMap: new Map(), fetchImpl,
+    usageMap: opts?.usageMap, providerCaps: opts?.providerCaps,
   });
 }
 
@@ -138,5 +148,52 @@ describe("POST /v1/chat/completions", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.choices[0].message.content).toBe("Hello!");
+  });
+});
+
+describe("harvest recording (non-streaming)", () => {
+  it("records exact usage from the response body", async () => {
+    const usageFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-srv-")), "usage.json");
+    // single candidate: with several limited models the headroom sort would
+    // rotate request 2 onto a fresh model and break exact-count assertions
+    const limited = REGISTRY.filter((e) => e.id === "groq::openai/gpt-oss-120b")
+      .map((e) => ({ ...e, limits: { rpd: 2 } }));
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    const usageMap = new Map();
+    const app = makeServer(fetchImpl, { usageMap, registry: limited });
+    bindUsageFile(usageFile);
+    try {
+      for (let i = 0; i < 2; i++) {
+        await app.inject({ method: "POST", url: "/v1/chat/completions",
+          payload: { messages: [{ role: "user", content: "hi" }] } });
+      }
+      const rec = loadUsage(usageFile).get("groq::openai/gpt-oss-120b");
+      expect(rec?.requests).toBe(2);
+      expect(rec?.tokensIn).toBe(200);
+      expect(rec?.tokensOut).toBe(40);
+    } finally {
+      bindUsageFile(null);
+    }
+  });
+
+  it("reports skippedByBudget when every candidate is spent or fails", async () => {
+    const DAY = utcDayKey(Date.now());
+    const spent = new Map([["groq::openai/gpt-oss-120b", { day: DAY, requests: 999, tokensIn: 0, tokensOut: 0 }]]);
+    const limited = REGISTRY.filter((e) => e.provider === "groq").map((e) => ({ ...e, limits: { rpd: 100 } }));
+    const fetchImpl = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
+    const app = makeServer(fetchImpl, {
+      usageMap: spent, registry: limited,
+    });
+    const res = await app.inject({ method: "POST", url: "/v1/chat/completions",
+      payload: { model: "auto/coding", messages: [{ role: "user", content: "x" }] } });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.skippedByBudget).toEqual(["groq::openai/gpt-oss-120b"]);
   });
 });
