@@ -54,6 +54,32 @@ describe("formatStatusRow usage column", () => {
   });
 });
 
+describe("formatStatusRow provider pool column", () => {
+  const TOTALS = { requests: 1, tokensIn: 70, tokensOut: 5 };
+
+  it("renders pool spend for rpd-seeded providers", () => {
+    const row = formatStatusRow(E, { state: "ok" }, NOW, undefined, { rpd: 1000 }, TOTALS);
+    expect(row).toContain("pool 1/1k");
+  });
+
+  it("renders pool token spend for tpd-seeded providers", () => {
+    const row = formatStatusRow(E, { state: "ok" }, NOW, undefined, { tpd: 1000000 }, TOTALS);
+    expect(row).toContain("pool 75/1M");
+  });
+
+  it("joins model and pool segments", () => {
+    const half: RegistryEntry = { ...E, limits: { rpd: 50 } };
+    const row = formatStatusRow(half, { state: "ok" }, NOW,
+      { day: "2026-08-23", requests: 2, tokensIn: 0, tokensOut: 0 }, { rpd: 1000 }, TOTALS);
+    expect(row).toContain("req 2/50");
+    expect(row).toContain("pool 1/1k");
+  });
+
+  it("stays dash without pool caps even when totals exist", () => {
+    expect(formatStatusRow(E, { state: "ok" }, NOW, undefined, undefined, TOTALS)).toContain("req -");
+  });
+});
+
 describe("noProvidersHint", () => {
   it("leads with the problem and names a concrete fix path", () => {
     const lines = noProvidersHint();

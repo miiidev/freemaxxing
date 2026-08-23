@@ -94,7 +94,8 @@ Freeroll tracks how much of each model's free-tier daily allowance you have spen
 - provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day) are respected across all their models;
 - a model that hits its cap is parked until the UTC reset, exactly like a 429 would.
 
-Spend shows up in `freeroll status` (`req 12/50 · tok 84k/1M`). Caps come from
+Spend shows up in `freeroll status` (`req 12/50 · tok 84k/1M` per model, plus
+`pool 3/1000` for provider-wide pools). Caps come from
 curated seeds in `registry.json`/`providers.json`; override or extend them per
 model or provider in `~/.freeroll/config.json`:
 

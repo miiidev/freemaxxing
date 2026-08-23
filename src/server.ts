@@ -178,6 +178,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       annotator.on("error", () => {
         if (!reply.raw.writableEnded) reply.raw.end();
       });
+      // First close of any chain link resolves; reply.raw close always fires
+      // (completion or client disconnect), bounding the wait. Listener sets
+      // differ per branch: the last transform before reply.raw is annotator
+      // here, rewriter in the bare branch below.
       await new Promise<void>((resolveDone) => {
         reply.raw.on("close", () => resolveDone());
         capture.on("close", () => resolveDone());

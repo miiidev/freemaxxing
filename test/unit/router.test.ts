@@ -156,4 +156,20 @@ describe("harvest off parity", () => {
     expect(out.candidates.map((x) => x.id)).toEqual(["a::one", "b::two"]);
     expect(out.skippedByBudget).toEqual([]); // REG entries carry no limits -> inert
   });
+
+  it("spent limited models stay candidates when harvest is off", () => {
+    const spent = { "a::one": recOf(100), "b::two": recOf(100), "c::three": recOf(100) };
+    const out = resolve("auto/any", BUILT_IN_ALIASES, LIMITED, () => OK, {
+      ...CTX, harvest: false, now: DAY, getUsage: (id) => spent[id],
+    });
+    expect(out.candidates.map((x) => x.id)).toEqual(["c::three", "a::one", "b::two"]); // legacy tier/speed order
+    expect(out.skippedByBudget).toEqual([]);
+  });
+
+  it("unlimited still outranks capped at full ties with harvest off (limitedKey)", () => {
+    // documents the intentional deviation from byte-for-byte v0 parity
+    const mixed = [...LIMITED, e({ id: "z::free", provider: "z", upstream: "free", tags: ["chat"], tier: 1 })];
+    const out = resolve("auto/any", BUILT_IN_ALIASES, mixed, () => OK, { ...CTX, harvest: false, now: DAY });
+    expect(out.candidates[0].id).toBe("z::free");
+  });
 });

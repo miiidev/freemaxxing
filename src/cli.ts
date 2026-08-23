@@ -7,8 +7,8 @@ import {
   defaultUsagePath, mergedProviderCaps,
 } from "./config.js";
 import { loadState, effective, bindStateFile } from "./state.js";
-import { bindUsageFile, loadUsage } from "./usage.js";
-import type { ModelState, RegistryEntry, UsageRecord } from "./types.js";
+import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
+import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
 function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${Math.round(n / 100_000) / 10}M`;
@@ -21,6 +21,8 @@ export function formatStatusRow(
   msRaw: ModelState,
   now: number,
   usage?: UsageRecord,
+  poolCaps?: DailyCaps,
+  poolTotals?: ProviderTotals,
 ): string {
   const ms = effective(msRaw, now);
   let state: string;
@@ -31,16 +33,21 @@ export function formatStatusRow(
   } else {
     state = `exhausted until ${new Date(ms.until).toISOString().slice(0, 16)}Z`;
   }
-  // spend column only makes sense when the model has caps and today's usage on file
-  let usageCol = "req -";
+  const parts: string[] = [];
   if (e.limits && usage) {
-    const parts: string[] = [];
     if (e.limits.rpd) parts.push(`req ${usage.requests}/${fmtCompact(e.limits.rpd)}`);
     if (e.limits.tpd) {
       parts.push(`tok ${fmtCompact(usage.tokensIn + usage.tokensOut)}/${fmtCompact(e.limits.tpd)}`);
     }
-    usageCol = parts.length > 0 ? parts.join(" · ") : "req -";
   }
+  // provider pools are account-wide: show them even when the model itself is unseeded
+  if (poolCaps && poolTotals) {
+    if (poolCaps.rpd) parts.push(`pool ${poolTotals.requests}/${fmtCompact(poolCaps.rpd)}`);
+    else if (poolCaps.tpd) {
+      parts.push(`pool ${fmtCompact(poolTotals.tokensIn + poolTotals.tokensOut)}/${fmtCompact(poolCaps.tpd)}`);
+    }
+  }
+  const usageCol = parts.length > 0 ? parts.join(" · ") : "req -";
   return [
     e.id.padEnd(50),
     `t${e.tier}`,
@@ -80,9 +87,20 @@ async function printStatus(): Promise<void> {
     return;
   }
   console.log("");
+  const providerCaps = mergedProviderCaps(cfg);
+  const poolTotalsCache = new Map<string, ProviderTotals>();
   for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
     if (!providers[entry.provider]) continue;
-    console.log(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, Date.now(), usageMap.get(entry.id)));
+    // provider totals are shared across a pool's models — compute once per provider
+    let poolTotals: ProviderTotals | undefined;
+    const caps = providerCaps[entry.provider];
+    if (caps) {
+      if (!poolTotalsCache.has(entry.provider)) {
+        poolTotalsCache.set(entry.provider, aggregateProvider(usageMap, entry.provider));
+      }
+      poolTotals = poolTotalsCache.get(entry.provider);
+    }
+    console.log(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, Date.now(), usageMap.get(entry.id), caps, poolTotals));
   }
 }
 
