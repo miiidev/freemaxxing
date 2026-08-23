@@ -3,6 +3,7 @@ import { buildServer } from "../../src/server.js";
 import type { AppConfig, ActiveProvider } from "../../src/config.js";
 import { REGISTRY } from "../../src/catalog.js";
 import { BUILT_IN_ALIASES } from "../../src/router.js";
+import type { UsageMap } from "../../src/types.js";
 
 const CFG: AppConfig = {
   port: 8787, host: "127.0.0.1", aliases: {},
@@ -82,5 +83,74 @@ describe("streaming", () => {
 
     expect(body).toContain('"freeroll_error":"upstream_stream_failed"');
     expect(body).not.toContain("data: [DONE]");
+  });
+});
+
+// Pinned to one model: with the full REGISTRY the served id depends on
+// cross-provider failover ordering, so assertions would be non-deterministic.
+const PINNED = [{ ...REGISTRY.find((e) => e.id === "groq::openai/gpt-oss-20b")!, limits: { rpd: 100 } }];
+
+function makeStreamServer(fetchImpl: typeof fetch, usageMap: UsageMap) {
+  return buildServer({
+    config: CFG, providers: PROV, aliases: BUILT_IN_ALIASES,
+    registry: PINNED, stateMap: new Map(), fetchImpl, usageMap,
+  });
+}
+
+describe("streaming usage recording", () => {
+  it("records real usage when the stream carries a usage frame", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const usageMap: UsageMap = new Map();
+    const app = makeStreamServer(fetchImpl, usageMap);
+    const res = await post(app, { stream: true, messages: [{ role: "user", content: "hello" }] });
+    expect(res.statusCode).toBe(200);
+    const rec = usageMap.get("groq::openai/gpt-oss-20b");
+    expect(rec?.requests).toBe(1);
+    expect(rec?.tokensIn).toBe(7);
+    expect(rec?.tokensOut).toBe(3);
+  });
+
+  it("falls back to the request-size estimate when no usage frame arrives", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"x"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const usageMap: UsageMap = new Map();
+    const app = makeStreamServer(fetchImpl, usageMap);
+    const res = await post(app, { stream: true, messages: [{ role: "user", content: "hello" }] });
+    expect(res.statusCode).toBe(200);
+    const rec = usageMap.get("groq::openai/gpt-oss-20b");
+    expect(rec?.requests).toBe(1);
+    expect(rec?.tokensIn).toBeGreaterThan(0); // chars/4 estimate of request body
+    expect(rec?.tokensOut).toBe(0);
+  });
+
+  it("records on the annotated path too", async () => {
+    const cfgAnnotated = { ...CFG, annotateResponses: true };
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const usageMap: UsageMap = new Map();
+    const app = buildServer({
+      config: cfgAnnotated, providers: PROV, aliases: BUILT_IN_ALIASES,
+      registry: PINNED, stateMap: new Map(), fetchImpl, usageMap,
+    });
+    const res = await post(app, { stream: true, messages: [{ role: "user", content: "hello" }] });
+    expect(res.statusCode).toBe(200);
+    const rec = usageMap.get("groq::openai/gpt-oss-20b");
+    expect(rec?.tokensIn).toBe(5);
+    expect(rec?.tokensOut).toBe(2);
+    expect(res.body).toContain("freeroll: "); // annotation still flows through capture untouched
   });
 });

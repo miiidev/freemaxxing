@@ -4,7 +4,7 @@ import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
 import { aggregateProvider, maybeExhaust, recordUsage } from "./usage.js";
 import { Readable } from "node:stream";
-import { sseModelRewriter, sseAnnotator } from "./sse.js";
+import { sseModelRewriter, sseAnnotator, sseUsageCapture } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
@@ -154,11 +154,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
     const rewriter = sseModelRewriter(servedId);
+    let capturedUsage: { tokensIn: number; tokensOut: number } | undefined;
+    const capture = sseUsageCapture((u) => { capturedUsage = u; });
 
     if (deps.config.annotateResponses) {
       const annotator = sseAnnotator(servedId);
       annotator.pipe(reply.raw);
-      rewriter.pipe(annotator);
+      capture.pipe(annotator);
+      rewriter.pipe(capture);
       upstream.pipe(rewriter);
       upstream.on("error", () => {
         if (!reply.raw.writableEnded) {
@@ -167,6 +170,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
       });
       rewriter.on("error", () => {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      });
+      capture.on("error", () => {
         if (!reply.raw.writableEnded) reply.raw.end();
       });
       annotator.on("error", () => {
@@ -174,10 +180,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       });
       await new Promise<void>((resolveDone) => {
         reply.raw.on("close", () => resolveDone());
+        capture.on("close", () => resolveDone());
         annotator.on("close", () => resolveDone());
       });
     } else {
-      rewriter.pipe(reply.raw);
+      capture.pipe(reply.raw);
+      rewriter.pipe(capture);
       upstream.pipe(rewriter);
       upstream.on("error", () => {
         if (!reply.raw.writableEnded) {
@@ -188,11 +196,18 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       rewriter.on("error", () => {
         if (!reply.raw.writableEnded) reply.raw.end();
       });
+      capture.on("error", () => {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      });
       await new Promise<void>((resolveDone) => {
         reply.raw.on("close", () => resolveDone());
+        capture.on("close", () => resolveDone());
         rewriter.on("close", () => resolveDone());
       });
     }
+    // Real totals when the provider sent a usage frame; undefined falls back
+    // to the request-size estimate inside recordServed.
+    recordServed(result.servedBy, capturedUsage);
     return reply;
   });
 
