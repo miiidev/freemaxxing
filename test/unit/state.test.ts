@@ -77,7 +77,7 @@ describe("persistence", () => {
     bindStateFile(file);
     const map = new Map();
     recordFailure(map, "groq::x", { kind: "quota" }, RESET, T0);
-    expect(loadState(file).get("groq::x")?.state).toBe("exhausted");
+    expect(loadState(file, T0).get("groq::x")?.state).toBe("exhausted");
   });
 
   it("setState persists when bound", () => {
