@@ -53,6 +53,10 @@ export interface AliasDef {
 export interface RequestCtx {
   hasTools: boolean;
   estTokens: number;
+  harvest?: boolean;
+  getUsage?: (id: string) => UsageRecord | undefined;
+  getProviderCaps?: (provider: string) => DailyCaps | undefined;
+  now?: number;
 }
 
 export interface DailyCaps {

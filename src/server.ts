@@ -65,7 +65,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           hasTools: Array.isArray(body.tools) && body.tools.length > 0,
           estTokens: estimateTokens(body),
         },
-      );
+      ).candidates;
     } catch (e) {
       if (e instanceof UnknownAliasError) {
         return reply.code(404).send(err("unknown_alias", e.message));
