@@ -2,10 +2,21 @@ import providersJson from "./providers.json" with { type: "json" };
 import registryJson from "./registry.json" with { type: "json" };
 import type { ProviderDef, RegistryEntry } from "./types.js";
 
+function validCaps(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (typeof v !== "object" || v === null) return false;
+  const c = v as Record<string, unknown>;
+  return (
+    (c.rpd === undefined || (typeof c.rpd === "number" && c.rpd > 0)) &&
+    (c.tpd === undefined || (typeof c.tpd === "number" && c.tpd > 0))
+  );
+}
+
 function isProviderDef(v: unknown): v is ProviderDef {
   if (typeof v !== "object" || v === null) return false;
   const d = v as Record<string, unknown>;
   const reset = d.resetProfile;
+  if (!validCaps(d.limits)) return false;
   return (
     typeof d.baseURL === "string" &&
     d.baseURL.startsWith("https://") &&
@@ -21,6 +32,7 @@ function isProviderDef(v: unknown): v is ProviderDef {
 function isRegistryEntry(v: unknown): v is RegistryEntry {
   if (typeof v !== "object" || v === null) return false;
   const e = v as Record<string, unknown>;
+  if (!validCaps(e.limits)) return false;
   if (
     typeof e.id !== "string" ||
     typeof e.provider !== "string" ||
@@ -56,3 +68,15 @@ for (const e of rawRegistry) {
   }
 }
 export const REGISTRY = rawRegistry as RegistryEntry[];
+
+export function applyModelLimits(
+  registry: RegistryEntry[],
+  overrides?: Record<string, Partial<NonNullable<RegistryEntry["limits"]>>>,
+): RegistryEntry[] {
+  if (!overrides) return registry;
+  return registry.map((e) => {
+    const o = overrides[e.id];
+    if (!o) return e;
+    return { ...e, limits: { ...e.limits, ...o } };
+  });
+}

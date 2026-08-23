@@ -3,13 +3,15 @@
     "baseURL": "https://openrouter.ai/api/v1",
     "auth": "bearer",
     "quirks": "openrouter",
-    "resetProfile": { "kind": "daily-utc-midnight" }
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "limits": { "rpd": 50 }
   },
   "groq": {
     "baseURL": "https://api.groq.com/openai/v1",
     "auth": "bearer",
     "quirks": "groq",
-    "resetProfile": { "kind": "daily-utc-midnight" }
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "limits": { "rpd": 1000 }
   },
   "google": {
     "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -33,6 +35,7 @@
     "baseURL": "https://api.cerebras.ai/v1",
     "auth": "bearer",
     "quirks": "cerebras",
-    "resetProfile": { "kind": "daily-utc-midnight" }
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "limits": { "tpd": 1000000 }
   }
 }

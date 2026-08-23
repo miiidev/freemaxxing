@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { PROVIDERS } from "./catalog.js";
 import { BUILT_IN_ALIASES } from "./router.js";
-import type { AliasDef, ProviderDef } from "./types.js";
+import type { AliasDef, DailyCaps, ProviderDef } from "./types.js";
 
 export interface AppConfig {
   port: number;
@@ -11,6 +11,9 @@ export interface AppConfig {
   aliases: Record<string, AliasDef>;
   providers: Record<string, { apiKeyEnv: string }>;
   annotateResponses: boolean;
+  harvest: boolean;
+  modelLimits: Record<string, Partial<DailyCaps>>;
+  providerLimits: Record<string, Partial<DailyCaps>>;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -34,6 +37,9 @@ export function defaultStatePath(): string {
 }
 export function defaultEnvPath(): string {
   return path.join(os.homedir(), ".freeroll", ".env");
+}
+export function defaultUsagePath(): string {
+  return path.join(os.homedir(), ".freeroll", "usage.json");
 }
 
 export function parseEnvFile(text: string): Record<string, string> {
@@ -68,6 +74,9 @@ export function loadConfig(configPath: string | null): AppConfig {
     host: "127.0.0.1",
     aliases: {},
     annotateResponses: true,
+    harvest: true,
+    modelLimits: {},
+    providerLimits: {},
     providers: Object.fromEntries(
       Object.entries(DEFAULT_ENV_KEYS).map(([name, envKey]) => [name, { apiKeyEnv: envKey }]),
     ),
@@ -77,6 +86,13 @@ export function loadConfig(configPath: string | null): AppConfig {
     if (typeof raw.port === "number") cfg.port = raw.port;
     if (typeof raw.host === "string") cfg.host = raw.host;
     if (typeof raw.annotateResponses === "boolean") cfg.annotateResponses = raw.annotateResponses;
+    if (typeof raw.harvest === "boolean") cfg.harvest = raw.harvest;
+    if (raw.modelLimits && typeof raw.modelLimits === "object") {
+      cfg.modelLimits = raw.modelLimits as AppConfig["modelLimits"];
+    }
+    if (raw.providerLimits && typeof raw.providerLimits === "object") {
+      cfg.providerLimits = raw.providerLimits as AppConfig["providerLimits"];
+    }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
   }
@@ -100,4 +116,16 @@ export function activeProviders(
 
 export function mergedAliases(cfg: AppConfig): Record<string, AliasDef> {
   return { ...BUILT_IN_ALIASES, ...cfg.aliases };
+}
+
+// Provider pools are account/org-wide: every model under a provider shares one budget.
+export function mergedProviderCaps(cfg: AppConfig): Record<string, DailyCaps> {
+  const out: Record<string, DailyCaps> = {};
+  for (const [name, def] of Object.entries(PROVIDERS)) {
+    if (def.limits) out[name] = { ...def.limits };
+  }
+  for (const [name, o] of Object.entries(cfg.providerLimits)) {
+    out[name] = { ...out[name], ...o };
+  }
+  return out;
 }

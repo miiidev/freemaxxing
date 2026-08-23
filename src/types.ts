@@ -16,6 +16,7 @@ export interface ProviderDef {
   auth: "bearer";
   quirks: string;
   resetProfile: ResetProfile;
+  limits?: DailyCaps;
 }
 
 export interface RegistryEntry {
@@ -27,6 +28,7 @@ export interface RegistryEntry {
   speed: Speed;
   context: number;
   tools: boolean;
+  limits?: DailyCaps;
 }
 
 export type ModelState =

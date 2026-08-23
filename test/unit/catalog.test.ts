@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PROVIDERS, REGISTRY } from "../../src/catalog.js";
+import { PROVIDERS, REGISTRY, applyModelLimits } from "../../src/catalog.js";
 
 describe("catalogs", () => {
   it("exposes all six providers with valid shape", () => {
@@ -25,5 +25,33 @@ describe("catalogs", () => {
 
   it("ids are unique", () => {
     expect(new Set(REGISTRY.map((e) => e.id)).size).toBe(REGISTRY.length);
+  });
+});
+
+describe("applyModelLimits", () => {
+  it("merges per-field overrides over seeded limits", () => {
+    const reg = [{ ...REGISTRY[0], limits: { rpd: 50, tpd: 1000 } }];
+    const out = applyModelLimits(reg, { [REGISTRY[0].id]: { tpd: 2000 } });
+    expect(out[0].limits).toEqual({ rpd: 50, tpd: 2000 });
+  });
+
+  it("adds limits to entries without them", () => {
+    const entry = REGISTRY.find((e) => !e.limits)!;
+    const out = applyModelLimits([entry], { [entry.id]: { rpd: 7 } });
+    expect(out[0].limits).toEqual({ rpd: 7 });
+  });
+
+  it("ignores unknown ids and returns entries unchanged when no overrides", () => {
+    expect(applyModelLimits(REGISTRY, { "nope::x": { rpd: 1 } })).toEqual(REGISTRY);
+    expect(applyModelLimits(REGISTRY)).toEqual(REGISTRY);
+  });
+});
+
+describe("seeded caps", () => {
+  it("openrouter pool is account-wide 50/day; google models have per-model rpd", () => {
+    expect(PROVIDERS.openrouter.limits).toEqual({ rpd: 50 });
+    expect(PROVIDERS.groq.limits?.rpd).toBeGreaterThan(0);
+    expect(PROVIDERS.cerebras.limits?.tpd).toBeGreaterThan(0);
+    expect(REGISTRY.find((e) => e.id === "google::gemini-2.5-pro")!.limits!.rpd).toBeGreaterThan(0);
   });
 });

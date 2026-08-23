@@ -55,7 +55,7 @@ Groq returns 404 for this id:
     "code":"model_not_found"}}
 
 It failed every request observed today while other Groq models served.
-Unverified but still listed: groq::llama-3.1-8b-instant � recheck on next
+Unverified but still listed: groq::llama-3.1-8b-instant � recheck on next
 curation pass.
 
 ## Known operational constraint (2026-08-22): Groq free-org request caps
@@ -67,3 +67,28 @@ qwen models. Tiny probes (<200 token prompts) succeed. The practical floor
 for reliable opencode/agent traffic is a provider without such tight org-level
 request caps (e.g., OpenRouter :free) or multiple provider keys so the router
 has alternatives when Groq bounces large payloads.
+
+## Daily-cap seed evidence (2026-08-23)
+
+Seeds live in `src/providers.json` (provider pools) and `src/registry.json`
+(per-model). One evidence line per source, verified against live docs:
+
+- OpenRouter — https://openrouter.ai/docs/api-reference/limits (2026-08-23):
+  free-model (`:free`) requests per day = 50 for accounts that have purchased
+  < 10 credits all-time; 1,000/day once ≥ 10 credits purchased. Seeded pool:
+  `{rpd: 50}`.
+- Groq — https://console.groq.com/docs/rate-limits (2026-08-23): Free plan
+  per-model RPD = 1K for `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, and
+  `qwen/qwen3.6-27b` (all routed here); TPD 200K. Planned seed of 14,400 was
+  stale — that figure now applies only to prompt-guard models. Seeded pool at
+  the floor of routed models: `{rpd: 1000}`.
+- Cerebras — https://inference-docs.cerebras.ai/support/rate-limits
+  (2026-08-23): Free Trial tier TPD = 1M tokens/day per model (`gpt-oss-120b`,
+  `gemma-4-31b`); no permanent free tier exists (trial is $5 credits / 30
+  days). Seeded pool: `{tpd: 1000000}`.
+- Google — https://ai.google.dev/gemini-api/docs/rate-limits (2026-08-23):
+  page unreachable from build environment (two fetch timeouts); third-party
+  summaries conflict (gemini-2.5-pro cited as 25 / 50 / 100 RPD; flash models
+  as 250 / 500 / 1500 RPD). Seeds kept at planned values — gemini-2.5-pro
+  `{rpd: 100}`, gemini-2.5-flash `{rpd: 250}`, gemini-2.0-flash `{rpd: 200}`
+  — unverified as of 2026-08-23. Recheck on next curation pass.

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseEnvFile, loadEnv, loadConfig, activeProviders, mergedAliases } from "../../src/config.js";
+import { parseEnvFile, loadEnv, loadConfig, activeProviders, mergedAliases, mergedProviderCaps } from "../../src/config.js";
 import { PROVIDERS } from "../../src/catalog.js";
 import { BUILT_IN_ALIASES } from "../../src/router.js";
 
@@ -74,5 +74,36 @@ describe("mergedAliases", () => {
     const aliases = mergedAliases(cfg);
     expect(aliases["auto/coding"]).toEqual(BUILT_IN_ALIASES["auto/coding"]);
     expect(aliases["auto/mine"]).toBeDefined();
+  });
+});
+
+describe("harvest config", () => {
+  it("defaults harvest on with empty override maps", () => {
+    const cfg = loadConfig(null);
+    expect(cfg.harvest).toBe(true);
+    expect(cfg.modelLimits).toEqual({});
+    expect(cfg.providerLimits).toEqual({});
+  });
+
+  it("parses harvest off and limit overrides", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-cfg-"));
+    const file = path.join(dir, "config.json");
+    fs.writeFileSync(file, JSON.stringify({
+      harvest: false,
+      modelLimits: { "google::gemini-2.5-pro": { rpd: 5 } },
+      providerLimits: { openrouter: { rpd: 1000 } },
+    }));
+    const cfg = loadConfig(file);
+    expect(cfg.harvest).toBe(false);
+    expect(cfg.modelLimits["google::gemini-2.5-pro"]).toEqual({ rpd: 5 });
+    expect(cfg.providerLimits.openrouter).toEqual({ rpd: 1000 });
+  });
+
+  it("mergedProviderCaps overlays config onto provider seeds per-field", () => {
+    const cfg = loadConfig(null);
+    cfg.providerLimits = { openrouter: { rpd: 1000 } };
+    const caps = mergedProviderCaps(cfg);
+    expect(caps.openrouter).toEqual({ rpd: 1000 }); // seed had only rpd anyway
+    expect(caps.groq).toEqual(PROVIDERS.groq.limits);
   });
 });
