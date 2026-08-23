@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { Writable, Readable } from "node:stream";
-import { rewriteModelField, sseModelRewriter, sseAnnotator } from "../../src/sse.js";
+import { Transform, Writable, Readable } from "node:stream";
+import {
+  rewriteModelField,
+  sseModelRewriter,
+  sseAnnotator,
+  sseUsageCapture,
+} from "../../src/sse.js";
 
 describe("rewriteModelField", () => {
   it("rewrites model in an SSE frame", () => {
@@ -95,5 +100,37 @@ describe("sseAnnotator", () => {
     const out = await promise;
     expect(out).not.toContain("freeroll:");
     expect(out).toBe(DONE);
+  });
+});
+
+async function pipeThrough(input: string, t: Transform): Promise<string> {
+  const results: string[] = [];
+  const sink = new Writable({
+    write(chunk, _enc, cb) { results.push(chunk.toString()); cb(); },
+  });
+  t.pipe(sink);
+  t.end(input);
+  return new Promise((resolve) => sink.on("finish", () => resolve(results.join(""))));
+}
+
+describe("sseUsageCapture", () => {
+  it("passes frames through untouched and captures usage once", async () => {
+    const frames = [
+      'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":34}}\n\n',
+      'data: {"choices":[{"delta":{"content":" with \\"usage\\" inside"}}]}\n\n', // word inside content must not match
+      "data: [DONE]\n\n",
+    ].join("");
+    let captured: { tokensIn: number; tokensOut: number } | undefined;
+    const out = await pipeThrough(frames, sseUsageCapture((u) => { captured ??= u; }));
+    expect(out).toBe(frames);
+    expect(captured).toEqual({ tokensIn: 12, tokensOut: 34 });
+  });
+
+  it("never fires on streams without usage", async () => {
+    let fired = false;
+    await pipeThrough('data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n',
+      sseUsageCapture(() => { fired = true; }));
+    expect(fired).toBe(false);
   });
 });

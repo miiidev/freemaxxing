@@ -77,3 +77,47 @@ function annotationFrame(modelId: string): string {
     })}\n\n`
   );
 }
+
+export interface CapturedUsage {
+  tokensIn: number;
+  tokensOut: number;
+}
+
+// Observes usage totals without altering a single byte of the stream.
+export function sseUsageCapture(onUsage: (u: CapturedUsage) => void): Transform {
+  let buffer = "";
+  let done = false;
+  const scan = (frame: string) => {
+    if (done || !frame.startsWith("data: ") || frame === "data: [DONE]") return;
+    try {
+      const parsed = JSON.parse(frame.slice(6)) as Record<string, unknown>;
+      const u = parsed.usage as Record<string, unknown> | undefined;
+      if (u && typeof u === "object") {
+        const tokensIn = typeof u.prompt_tokens === "number"
+          ? u.prompt_tokens
+          : typeof u.total_tokens === "number" ? u.total_tokens : 0;
+        const tokensOut = typeof u.completion_tokens === "number" ? u.completion_tokens : 0;
+        if (tokensIn > 0 || tokensOut > 0) {
+          done = true;
+          onUsage({ tokensIn, tokensOut });
+        }
+      }
+    } catch {
+      // malformed JSON — ignore
+    }
+  };
+  return new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      this.push(chunk);
+      buffer += chunk.toString();
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      parts.forEach(scan);
+      cb();
+    },
+    flush(cb) {
+      scan(buffer);
+      cb();
+    },
+  });
+}
