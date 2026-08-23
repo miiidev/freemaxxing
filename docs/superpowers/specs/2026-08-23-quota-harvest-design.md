@@ -31,6 +31,26 @@ changes only how candidates *within a group* are ordered and which are excluded.
 - Semantic or quality-aware routing across tiers.
 - Multi-key round-robin per provider.
 
+### Provider-level pooled caps
+
+Some daily caps are **shared across a provider's whole model catalog**, not per-model
+(OpenRouter's free tier: 50 requests/day account-wide; Groq and Cerebras enforce
+org-level daily caps). Per-model counters alone would overshoot these by the number of
+catalog entries. Therefore limits exist at two levels:
+
+```ts
+// ProviderDef (providers.json) — pool shared by all of the provider's models
+limits?: { rpd?: number; tpd?: number };
+
+// RegistryEntry (registry.json) — per-model caps
+limits?: { rpd?: number; tpd?: number };
+```
+
+Budget checks and rotation fractions evaluate BOTH levels: per-model usage against
+model caps, and the sum of all models' usage under that provider against provider
+caps. Config overrides mirror this: `modelLimits` keyed by registry id,
+`providerLimits` keyed by provider name.
+
 ## 3. Data model
 
 ### Usage counters (`src/usage.ts`, new)
@@ -105,8 +125,11 @@ When `harvest === false`: comparator and filters are byte-for-byte today's behav
 // ~/.freeroll/config.json
 {
   "harvest": true,                    // default when absent; false restores v0 behavior
-  "modelLimits": {                     // per-field overrides over catalog seeds
-    "groq::openai/gpt-oss-120b": { "rpd": 1000 }
+  "modelLimits": {                     // per-field overrides over registry seeds
+    "google::gemini-2.5-pro": { "rpd": 100 }
+  },
+  "providerLimits": {                  // per-field overrides over provider pool seeds
+    "openrouter": { "rpd": 1000 }      // e.g. after the $10 lifetime top-up
   }
 }
 ```
