@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { UsageMap, UsageRecord } from "./types.js";
+import type { DailyCaps, UsageMap, UsageRecord } from "./types.js";
+import { nextUtcMidnight, setState, type StateMap } from "./state.js";
 
 export interface UsageDelta {
   requests?: number;
@@ -92,4 +93,49 @@ export function aggregateProvider(map: UsageMap, provider: string): ProviderTota
     totals.tokensOut += rec.tokensOut;
   }
   return totals;
+}
+
+export interface BudgetView {
+  rec?: UsageRecord;
+  modelCaps?: DailyCaps;
+  provTotals?: Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut">;
+  provCaps?: DailyCaps;
+}
+
+export function usedFraction(view: BudgetView, now: number = Date.now()): number {
+  const rec = rolled(view.rec, now);
+  let frac = 0;
+  if (view.modelCaps?.rpd) frac = Math.max(frac, rec.requests / view.modelCaps.rpd);
+  if (view.modelCaps?.tpd) frac = Math.max(frac, (rec.tokensIn + rec.tokensOut) / view.modelCaps.tpd);
+  if (view.provCaps?.rpd && view.provTotals) {
+    frac = Math.max(frac, view.provTotals.requests / view.provCaps.rpd);
+  }
+  if (view.provCaps?.tpd && view.provTotals) {
+    frac = Math.max(frac, (view.provTotals.tokensIn + view.provTotals.tokensOut) / view.provCaps.tpd);
+  }
+  return frac;
+}
+
+// each budget level is checked independently; any exhausted level blocks the call
+export function fitsBudget(view: BudgetView, estTokens: number, now: number = Date.now()): boolean {
+  const rec = rolled(view.rec, now);
+  if (view.modelCaps?.rpd !== undefined && (view.modelCaps.rpd - rec.requests) < 1) return false;
+  if (view.modelCaps?.tpd !== undefined && (view.modelCaps.tpd - (rec.tokensIn + rec.tokensOut)) < estTokens) {
+    return false;
+  }
+  if (view.provCaps?.rpd !== undefined && view.provTotals &&
+      (view.provCaps.rpd - view.provTotals.requests) < 1) {
+    return false;
+  }
+  if (view.provCaps?.tpd !== undefined && view.provTotals &&
+      (view.provCaps.tpd - (view.provTotals.tokensIn + view.provTotals.tokensOut)) < estTokens) {
+    return false;
+  }
+  return true;
+}
+
+export function maybeExhaust(states: StateMap, id: string, view: BudgetView, now: number): void {
+  if (!fitsBudget(view, 1, now)) {
+    setState(states, id, { state: "exhausted", until: nextUtcMidnight(now) });
+  }
 }

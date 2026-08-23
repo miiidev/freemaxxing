@@ -48,6 +48,11 @@ export function recordFailure(
   if (stateFile) saveState(stateFile, map);
 }
 
+export function setState(map: StateMap, id: string, ms: ModelState): void {
+  map.set(id, ms);
+  if (stateFile) saveState(stateFile, map);
+}
+
 export function saveState(file: string, map: StateMap): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;

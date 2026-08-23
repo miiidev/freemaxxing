@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   effective, applyFailure, loadState, saveState,
-  nextUtcMidnight, recordFailure, bindStateFile,
+  nextUtcMidnight, recordFailure, bindStateFile, setState,
 } from "../../src/state.js";
 
 const T0 = Date.UTC(2026, 7, 22, 12, 0, 0); // 2026-08-22T12:00:00Z
@@ -78,5 +78,13 @@ describe("persistence", () => {
     const map = new Map();
     recordFailure(map, "groq::x", { kind: "quota" }, RESET, T0);
     expect(loadState(file).get("groq::x")?.state).toBe("exhausted");
+  });
+
+  it("setState persists when bound", () => {
+    const file = tmpfile();
+    bindStateFile(file);
+    const map = new Map();
+    setState(map, "groq::x", { state: "exhausted", until: nextUtcMidnight(T0) });
+    expect(loadState(file, T0).get("groq::x")?.until).toBe(nextUtcMidnight(T0));
   });
 });

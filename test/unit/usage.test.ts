@@ -4,8 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import {
   utcDayKey, freshRecord, loadUsage, saveUsage, bindUsageFile,
-  recordUsage, aggregateProvider, type UsageMap,
+  recordUsage, aggregateProvider, fitsBudget, maybeExhaust, usedFraction,
+  type BudgetView, type UsageMap,
 } from "../../src/usage.js";
+import type { DailyCaps } from "../../src/types.js";
+import { effective } from "../../src/state.js";
 
 const T0 = Date.UTC(2026, 7, 23, 10, 0, 0);
 const NEXT_DAY = Date.UTC(2026, 7, 24, 0, 0, 1);
@@ -86,5 +89,88 @@ describe("aggregateProvider", () => {
       ["openrouter::c", { day: "2026-08-23", requests: 100, tokensIn: 9999, tokensOut: 99 }],
     ]);
     expect(aggregateProvider(map, "groq")).toEqual({ requests: 5, tokensIn: 150, tokensOut: 15 });
+  });
+});
+
+const CAPS_BOTH: DailyCaps = { rpd: 100, tpd: 1000 };
+
+describe("usedFraction", () => {
+  it("is 0 without caps or records", () => {
+    expect(usedFraction({}, T0)).toBe(0);
+    expect(usedFraction({ modelCaps: CAPS_BOTH }, T0)).toBe(0);
+  });
+
+  it("takes the max over seeded dimensions", () => {
+    const view: BudgetView = {
+      rec: { day: "2026-08-23", requests: 50, tokensIn: 900, tokensOut: 0 },
+      modelCaps: CAPS_BOTH,
+    };
+    expect(usedFraction(view, T0)).toBe(0.9); // tokens dominate over 50% requests
+  });
+
+  it("max of model-only and provider-pool fractions", () => {
+    const view: BudgetView = {
+      rec: { day: "2026-08-23", requests: 10, tokensIn: 0, tokensOut: 0 },
+      provTotals: { requests: 40, tokensIn: 0, tokensOut: 0 },
+      provCaps: { rpd: 100 },
+    };
+    expect(usedFraction(view, T0)).toBeCloseTo(0.4); // pool dominates model-only 0.1
+  });
+});
+
+describe("fitsBudget", () => {
+  it("true when no caps at any level", () => {
+    expect(fitsBudget({}, 5000, T0)).toBe(true);
+  });
+
+  it("false when remaining rpd < 1", () => {
+    const view: BudgetView = {
+      rec: { day: "2026-08-23", requests: 50, tokensIn: 0, tokensOut: 0 },
+      modelCaps: { rpd: 50 },
+    };
+    expect(fitsBudget(view, 1, T0)).toBe(false);
+  });
+
+  it("false when remaining tpd < estimated tokens", () => {
+    const view: BudgetView = {
+      rec: { day: "2026-08-23", requests: 0, tokensIn: 990, tokensOut: 0 },
+      modelCaps: CAPS_BOTH,
+    };
+    expect(fitsBudget(view, 11, T0)).toBe(false);
+    expect(fitsBudget(view, 10, T0)).toBe(true);
+  });
+
+  it("respects provider pool even when model has headroom", () => {
+    const view: BudgetView = {
+      rec: { day: "2026-08-23", requests: 0, tokensIn: 0, tokensOut: 0 },
+      provTotals: { requests: 50, tokensIn: 0, tokensOut: 0 },
+      provCaps: { rpd: 50 },
+    };
+    expect(fitsBudget(view, 1, T0)).toBe(false);
+  });
+});
+
+describe("maybeExhaust", () => {
+  it("marks exhausted until UTC midnight when fully spent", () => {
+    const states = new Map();
+    maybeExhaust(states, "a::m", {
+      rec: { day: "2026-08-23", requests: 50, tokensIn: 0, tokensOut: 0 },
+      modelCaps: { rpd: 50 },
+    }, T0);
+    const ms = states.get("a::m");
+    expect(ms.state).toBe("exhausted");
+    expect(ms.until).toBe(Date.UTC(2026, 7, 24, 0, 0, 0));
+  });
+
+  it("leaves state alone when budget remains", () => {
+    const states = new Map();
+    maybeExhaust(states, "a::m", { modelCaps: { rpd: 50 } }, T0);
+    expect(states.has("a::m")).toBe(false);
+  });
+});
+
+describe("effective interplay", () => {
+  it("treats exhausted state after rollover time as ok", () => {
+    expect(effective({ state: "exhausted", until: NEXT_DAY - 1 }, NEXT_DAY)).toEqual({ state: "ok" });
   });
 });
