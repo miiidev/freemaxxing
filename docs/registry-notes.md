@@ -55,7 +55,7 @@ Groq returns 404 for this id:
     "code":"model_not_found"}}
 
 It failed every request observed today while other Groq models served.
-Unverified but still listed: groq::llama-3.1-8b-instant � recheck on next
+Unverified but still listed: groq::llama-3.1-8b-instant — recheck on next
 curation pass.
 
 ## Known operational constraint (2026-08-22): Groq free-org request caps
