@@ -89,8 +89,8 @@ describe("client errors are deterministic, not rate limits", () => {
   it.each(Object.keys(QUIRKS))("%s: 400 -> bad_request", (name) => {
     expect(QUIRKS[name].classifyFailure(400, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
   });
-  it.each(Object.keys(QUIRKS))("%s: 404 -> bad_request", (name) => {
-    expect(QUIRKS[name].classifyFailure(404, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
+  it.each(Object.keys(QUIRKS))("%s: 404 -> retired", (name) => {
+    expect(QUIRKS[name].classifyFailure(404, {}, H({}), NOW)).toEqual({ kind: "retired" });
   });
   it.each(Object.keys(QUIRKS))("%s: 422 -> bad_request", (name) => {
     expect(QUIRKS[name].classifyFailure(422, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
