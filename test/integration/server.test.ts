@@ -7,6 +7,7 @@ import type { AppConfig, ActiveProvider } from "../../src/config.js";
 import { REGISTRY } from "../../src/catalog.js";
 import { BUILT_IN_ALIASES } from "../../src/router.js";
 import { loadUsage, bindUsageFile, utcDayKey } from "../../src/usage.js";
+import { loadState } from "../../src/state.js";
 import type { DailyCaps, RegistryEntry, UsageMap } from "../../src/types.js";
 
 const CFG: AppConfig = {
@@ -195,5 +196,35 @@ describe("harvest recording (non-streaming)", () => {
       payload: { model: "auto/coding", messages: [{ role: "user", content: "x" }] } });
     expect(res.statusCode).toBe(503);
     expect(res.json().error.skippedByBudget).toEqual(["groq::openai/gpt-oss-120b"]);
+  });
+});
+
+describe("proactive pool exhaustion", () => {
+  it("marks pool::<provider> exhausted when the pooled cap is spent", async () => {
+    const usageMap: UsageMap = new Map();
+    const stateMap = new Map();
+    const registry: RegistryEntry[] = [{
+      id: "or::m1", provider: "or", upstream: "m1",
+      tags: ["coding"], tier: 1, speed: "fast", context: 32000, tools: true,
+    }];
+    const app = buildServer({
+      config: CFG,
+      providers: { or: { baseURL: "https://or.test/v1", auth: "bearer", quirks: "openrouter", resetProfile: { kind: "daily-utc-midnight" }, apiKey: "k" } },
+      aliases: BUILT_IN_ALIASES,
+      registry,
+      stateMap,
+      fetchImpl: (async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "hi" } }] }), { status: 200 })) as unknown as typeof fetch,
+      usageMap,
+      providerCaps: { or: { rpd: 1 } },
+    });
+
+    const res = await app.inject({
+      method: "POST", url: "/v1/chat/completions",
+      payload: { model: "auto/coding", messages: [{ role: "user", content: "hi" }] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(stateMap.get("or::m1")).toMatchObject({ state: "exhausted", reason: "daily-cap" });
+    expect(stateMap.get("pool::or")).toMatchObject({ state: "exhausted", reason: "pool" });
   });
 });

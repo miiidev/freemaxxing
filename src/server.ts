@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
-import { aggregateProvider, maybeExhaust, recordUsage } from "./usage.js";
+import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } from "./usage.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
@@ -59,6 +59,15 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       return ms;
     };
 
+    const liveProviderState = (provider: string) => {
+      const ms = deps.stateMap.get(`pool::${provider}`);
+      if (!ms) return undefined;
+      if ((ms.state === "cooldown" || ms.state === "exhausted") && ms.until <= Date.now()) {
+        return { state: "ok" } as const;
+      }
+      return ms;
+    };
+
     const estTokens = estimateTokens(body);
     let resolved: ReturnType<typeof resolve>;
     try {
@@ -73,6 +82,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           harvest: deps.config.harvest === true,
           getUsage: (id) => usageMap.get(id),
           getProviderCaps: (p) => providerCaps[p],
+          getProviderState: liveProviderState,
           now: Date.now(),
         },
       );
@@ -93,12 +103,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         tokensIn: real?.tokensIn ?? estTokens,
         tokensOut: real?.tokensOut ?? 0,
       }, now);
-      maybeExhaust(deps.stateMap, entry.id, {
+      const view = {
         rec: usageMap.get(entry.id),
         modelCaps: entry.limits,
         provTotals: aggregateProvider(usageMap, entry.provider),
         provCaps: providerCaps[entry.provider],
-      }, now);
+      };
+      maybeExhaust(deps.stateMap, entry.id, view, now);
+      if (providerCaps[entry.provider]) {
+        maybeExhaustProvider(deps.stateMap, entry.provider, view, now);
+      }
     }
 
     const result = await execute({

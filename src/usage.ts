@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DailyCaps, UsageMap, UsageRecord } from "./types.js";
-import { nextUtcMidnight, setState, type StateMap } from "./state.js";
+import { nextUtcMidnight, setState, poolKey, type StateMap } from "./state.js";
 
 export interface UsageDelta {
   requests?: number;
@@ -136,6 +136,16 @@ export function fitsBudget(view: BudgetView, estTokens: number, now: number = Da
 
 export function maybeExhaust(states: StateMap, id: string, view: BudgetView, now: number): void {
   if (!fitsBudget(view, 1, now)) {
-    setState(states, id, { state: "exhausted", until: nextUtcMidnight(now) });
+    setState(states, id, { state: "exhausted", until: nextUtcMidnight(now), reason: "daily-cap" });
+  }
+}
+
+export function maybeExhaustProvider(states: StateMap, provider: string, view: BudgetView, now: number): void {
+  if (!fitsBudget(view, 1, now)) {
+    setState(states, poolKey(provider), {
+      state: "exhausted",
+      until: nextUtcMidnight(now),
+      reason: "pool",
+    });
   }
 }
