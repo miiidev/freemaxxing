@@ -3,7 +3,12 @@ import { buildServer } from "../../src/server.js";
 import type { AppConfig, ActiveProvider } from "../../src/config.js";
 import { REGISTRY } from "../../src/catalog.js";
 import { BUILT_IN_ALIASES } from "../../src/router.js";
-import type { UsageMap } from "../../src/types.js";
+import { loadUsage, bindUsageFile, utcDayKey } from "../../src/usage.js";
+import type { DailyCaps, RegistryEntry, UsageMap } from "../../src/types.js";
+import { bindMalformedFile, loadMalformed } from "../../src/malformed.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const CFG: AppConfig = {
   port: 8787, host: "127.0.0.1", aliases: {},
@@ -152,5 +157,51 @@ describe("streaming usage recording", () => {
     expect(rec?.tokensIn).toBe(5);
     expect(rec?.tokensOut).toBe(2);
     expect(res.body).toContain("freeroll: "); // annotation still flows through capture untouched
+  });
+});
+
+describe("streaming tool-call guard", () => {
+  it("appends freeroll_error frame and logs the event for truncated tool args", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-str-guard-"));
+    bindMalformedFile(path.join(dir, "m.jsonl"));
+
+    const sse = [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"patch","arguments":"{\\"path\\":"}}]}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const usageMap: UsageMap = new Map();
+    const app = makeStreamServer(fetchImpl, usageMap);
+
+    const res = await post(app, {
+      stream: true,
+      messages: [{ role: "user", content: "edit" }],
+      tools: [{ type: "function", function: { name: "patch" } }],
+    });
+    bindMalformedFile(null);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('"freeroll_error":"malformed_tool_call"');
+    expect(res.body.indexOf('"freeroll_error":"malformed_tool_call"'))
+      .toBeLessThan(res.body.indexOf("data: [DONE]"));
+    expect(loadMalformed(path.join(dir, "m.jsonl"))).toEqual([
+      { ts: expect.any(Number), model: "groq::openai/gpt-oss-20b", reason: "tool_calls[0]:arguments-not-json" },
+    ]);
+  });
+
+  it("clean streams stay byte-identical", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const app = makeStreamServer(fetchImpl, new Map());
+    const res = await post(app, {
+      stream: true,
+      messages: [{ role: "user", content: "hello" }],
+    });
+    expect(res.body).not.toContain("freeroll_error");
+    expect(res.body.trimEnd().endsWith("data: [DONE]")).toBe(true);
   });
 });

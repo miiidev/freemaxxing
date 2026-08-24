@@ -89,6 +89,14 @@ which model actually served your request:
 
 Disable it by setting `"annotateResponses": false` in `~/.freeroll/config.json`.
 
+## Tool-call validation
+
+For tool-carrying requests Freeroll validates tool-call payloads before your
+agent sees them: broken or truncated calls fail over silently before the first
+byte (non-streaming), or surface as a `{"freeroll_error":"malformed_tool_call"}`
+SSE frame at stream end. Every rejection is logged locally as a reason code
+(`~/.freeroll/malformed.jsonl`) — never the response content.
+
 ## Quota harvest
 
 Freeroll tracks how much of each model's free-tier daily allowance you have spent

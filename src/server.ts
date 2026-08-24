@@ -6,7 +6,7 @@ import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } fr
 import { validateCompletion, type ToolSpec } from "./toolcall.js";
 import { recordMalformed } from "./malformed.js";
 import { Readable } from "node:stream";
-import { sseModelRewriter, sseAnnotator, sseUsageCapture } from "./sse.js";
+import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
@@ -185,61 +185,44 @@ const candidates = resolved.candidates;
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
     const rewriter = sseModelRewriter(servedId);
+    const guard = needsTools
+      ? sseToolCallGuard({
+          tools: requestedTools,
+          onVerdict: (v) => {
+            if (!v.ok) recordMalformed(servedId, v.reason ?? "unknown");
+          },
+        })
+      : undefined;
     let capturedUsage: { tokensIn: number; tokensOut: number } | undefined;
     const capture = sseUsageCapture((u) => { capturedUsage = u; });
 
-    if (deps.config.annotateResponses) {
-      const annotator = sseAnnotator(servedId);
-      annotator.pipe(reply.raw);
-      capture.pipe(annotator);
-      rewriter.pipe(capture);
-      upstream.pipe(rewriter);
-      upstream.on("error", () => {
+    // Build the transform chain: rewriter -> [guard?] -> capture -> [annotator?] -> reply.raw
+    const head = guard ? rewriter.pipe(guard) : rewriter;
+    const tail = deps.config.annotateResponses ? sseAnnotator(servedId) : null;
+    const last = tail ?? capture;
+    if (tail) {
+      capture.pipe(tail);
+    }
+    head.pipe(capture);
+    last.pipe(reply.raw);
+    upstream.pipe(rewriter);
+
+    for (const link of [upstream, rewriter, ...(guard ? [guard] : []), capture, ...(tail ? [tail] : [])]) {
+      link.on("error", () => {
         if (!reply.raw.writableEnded) {
-          reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+          if (link === upstream) {
+            reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+          }
           reply.raw.end();
         }
-      });
-      rewriter.on("error", () => {
-        if (!reply.raw.writableEnded) reply.raw.end();
-      });
-      capture.on("error", () => {
-        if (!reply.raw.writableEnded) reply.raw.end();
-      });
-      annotator.on("error", () => {
-        if (!reply.raw.writableEnded) reply.raw.end();
-      });
-      // First close of any chain link resolves; reply.raw close always fires
-      // (completion or client disconnect), bounding the wait. Listener sets
-      // differ per branch: the last transform before reply.raw is annotator
-      // here, rewriter in the bare branch below.
-      await new Promise<void>((resolveDone) => {
-        reply.raw.on("close", () => resolveDone());
-        capture.on("close", () => resolveDone());
-        annotator.on("close", () => resolveDone());
-      });
-    } else {
-      capture.pipe(reply.raw);
-      rewriter.pipe(capture);
-      upstream.pipe(rewriter);
-      upstream.on("error", () => {
-        if (!reply.raw.writableEnded) {
-          reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
-          reply.raw.end();
-        }
-      });
-      rewriter.on("error", () => {
-        if (!reply.raw.writableEnded) reply.raw.end();
-      });
-      capture.on("error", () => {
-        if (!reply.raw.writableEnded) reply.raw.end();
-      });
-      await new Promise<void>((resolveDone) => {
-        reply.raw.on("close", () => resolveDone());
-        capture.on("close", () => resolveDone());
-        rewriter.on("close", () => resolveDone());
       });
     }
+
+    await new Promise<void>((resolveDone) => {
+      for (const link of [reply.raw, upstream, rewriter, ...(guard ? [guard] : []), capture, ...(tail ? [tail] : [])]) {
+        link.on("close", () => resolveDone());
+      }
+    });
     // Real totals when the provider sent a usage frame; undefined falls back
     // to the request-size estimate inside recordServed.
     recordServed(result.servedBy, capturedUsage);
