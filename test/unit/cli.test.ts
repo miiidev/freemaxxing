@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { formatStatusRow, formatPoolLine, runCli, noProvidersHint } from "../../src/cli.js";
+import { formatStatusRow, formatPoolLine, runCli, noProvidersHint, reviveCmd } from "../../src/cli.js";
+import { loadState, bindStateFile, setState, retireModel } from "../../src/state.js";
 import type { RegistryEntry, ModelState } from "../../src/types.js";
 
 const E: RegistryEntry = {
@@ -108,5 +112,43 @@ describe("noProvidersHint", () => {
     expect(joined.toLowerCase()).toContain(".env");
     expect(joined).toContain("$env:");
     expect(joined).toMatch(/does not create an environment variable/i);
+  });
+});
+
+describe("reviveCmd", () => {
+  it("clears matching model and pool entries and persists", () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-revive-")), "state.json");
+    const map = new Map();
+    retireModel(map, "or::a", Date.now());
+    setState(map, "pool::openrouter", { state: "exhausted", until: Date.now() + 9, reason: "pool" });
+    saveTmp(file, map);
+
+    bindStateFile(file);
+    const { removed } = reviveCmd("openrouter", file);
+    bindStateFile(null);
+
+    expect(removed).toEqual(["pool::openrouter"]);
+    expect(loadState(file).has("pool::openrouter")).toBe(false);
+    expect(loadState(file).has("or::a")).toBe(true);
+  });
+
+  it("reports nothing matched", () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-revive2-")), "state.json");
+    expect(reviveCmd("ghost", file).removed).toEqual([]);
+  });
+});
+
+function saveTmp(file: string, map: Map<string, unknown>): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(Object.fromEntries(map)));
+}
+
+describe("runCli arg routing", () => {
+  it("unknown command returns 64", async () => {
+    expect(await runCli(["bogus"])).toBe(64);
+  });
+
+  it("revive without argument returns 64", async () => {
+    expect(await runCli(["revive"])).toBe(64);
   });
 });

@@ -6,7 +6,7 @@ import {
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, mergedProviderCaps,
 } from "./config.js";
-import { loadState, effective, bindStateFile, poolKey } from "./state.js";
+import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
@@ -94,6 +94,14 @@ export function noProvidersHint(): string[] {
   ];
 }
 
+export function reviveCmd(target: string, statePath: string): { removed: string[] } {
+  const map = loadState(statePath);
+  bindStateFile(statePath);
+  const removed = reviveMatching(map, target);
+  bindStateFile(null);
+  return { removed };
+}
+
 async function printStatus(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
@@ -168,7 +176,19 @@ export async function runCli(argv: string[]): Promise<number> {
     });
   }
 
-  process.stderr.write("usage: freeroll [serve|status]\n");
+  if (cmd === "revive") {
+    const target = argv[1];
+    if (!target) {
+      process.stderr.write("usage: freeroll revive <model-id | provider-name>\n");
+      return 64;
+    }
+    const { removed } = reviveCmd(target, defaultStatePath());
+    if (removed.length === 0) console.log(`nothing matched '${target}'`);
+    else for (const id of removed) console.log(`revived ${id}`);
+    return 0;
+  }
+
+  process.stderr.write("usage: freeroll [serve|status|revive]\n");
   return 64;
 }
 

@@ -64,6 +64,11 @@ settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" bel
 Shows every model with its current limit state (`ok`, `cooldown Xm`,
 `exhausted until <UTC reset>`).
 
+Pooled providers appear once as a `[pool] …` line shared by their models;
+per-model rows carry reason codes (`cooldown 3m (peak-throttle)`,
+`exhausted (pool) until …`, `retired since …`). Clear stuck state with
+`freeroll revive <model-id>` (or a bare provider name to unblock a pool).
+
 ## Transparency
 
 Every response carries the actual serving model in its `model` field and the
