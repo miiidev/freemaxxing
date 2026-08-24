@@ -85,9 +85,22 @@ describe("POST /v1/chat/completions", () => {
 
   it("defaults missing model to auto/coding", async () => {
     let seenModel: string | undefined;
+    const responseBody = `{
+      "choices": [{
+        "finish_reason": "tool_calls",
+        "message": {
+          "tool_calls": [{
+            "function": {
+              "name": "patch",
+              "arguments": "{\\"path\\":\\"x.ts\\",\\"diff\\":\\"@@\\"}"
+            }
+          }]
+        }
+      }]
+    }`;
     const fetchImpl = (async (_url: string | URL, init?: RequestInit) => {
       seenModel = String(JSON.parse(String(init?.body)).model);
-      return new Response(JSON.stringify({ choices: [] }), { status: 200 });
+      return new Response(responseBody, { status: 200 });
     }) as unknown as typeof fetch;
     const app = makeServer(fetchImpl);
     const res = await app.inject({
@@ -226,5 +239,74 @@ describe("proactive pool exhaustion", () => {
     expect(res.statusCode).toBe(200);
     expect(stateMap.get("or::m1")).toMatchObject({ state: "exhausted", reason: "daily-cap" });
     expect(stateMap.get("pool::or")).toMatchObject({ state: "exhausted", reason: "pool" });
+  });
+});
+
+import { bindMalformedFile, loadMalformed } from "../../src/malformed.js";
+
+function twoModelRegistry(): RegistryEntry[] {
+  return [
+    { id: "p::bad", provider: "p", upstream: "bad", tags: ["coding"], tier: 1, speed: "fast", context: 32000, tools: true },
+    { id: "p::good", provider: "p", upstream: "good", tags: ["coding"], tier: 2, speed: "fast", context: 32000, tools: true },
+  ];
+}
+
+const TOOL_BODY = {
+  model: "auto/coding",
+  messages: [{ role: "user", content: "edit files" }],
+  tools: [{ type: "function", function: { name: "patch" } }],
+};
+
+describe("non-streaming tool-call validation", () => {
+  it("silently fails over to the next candidate on malformed output", async () => {
+    const fetchImpl = (async (_url: string | URL, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body));
+      const payload = sent.model === "bad"
+        ? { choices: [{ finish_reason: "tool_calls", message: { tool_calls: [
+            { function: { name: "patch", arguments: '{"path":' } }] } }] }
+        : { choices: [{ finish_reason: "tool_calls", message: { tool_calls: [
+            { function: { name: "patch", arguments: '{}' } }] } }] };
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-srv-tv-"));
+    bindMalformedFile(path.join(dir, "malformed.jsonl"));
+    const app = buildServer({
+      config: CFG,
+      providers: { p: { baseURL: "https://p.test/v1", auth: "bearer", quirks: "groq", resetProfile: { kind: "daily-utc-midnight" }, apiKey: "k" } },
+      aliases: BUILT_IN_ALIASES,
+      registry: twoModelRegistry(),
+      stateMap: new Map(),
+      fetchImpl,
+    });
+
+    const res = await app.inject({ method: "POST", url: "/v1/chat/completions", payload: TOOL_BODY });
+    bindMalformedFile(null);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-freeroll-served-by"]).toBe("p::good");
+    expect(loadMalformed(path.join(dir, "malformed.jsonl"))).toEqual([
+      { ts: expect.any(Number), model: "p::bad", reason: "tool_calls[0]:arguments-not-json" },
+    ]);
+  });
+
+  it("prose replies pass through without events", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "hi" } }] }), { status: 200 })
+    ) as unknown as typeof fetch;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-srv-tv2-"));
+    bindMalformedFile(path.join(dir, "m.jsonl"));
+    const app = buildServer({
+      config: CFG,
+      providers: { p: { baseURL: "https://p.test/v1", auth: "bearer", quirks: "groq", resetProfile: { kind: "daily-utc-midnight" }, apiKey: "k" } },
+      aliases: BUILT_IN_ALIASES,
+      registry: twoModelRegistry(),
+      stateMap: new Map(),
+      fetchImpl,
+    });
+    const res = await app.inject({ method: "POST", url: "/v1/chat/completions", payload: TOOL_BODY });
+    bindMalformedFile(null);
+    expect(res.statusCode).toBe(200);
+    expect(loadMalformed(path.join(dir, "m.jsonl"))).toEqual([]);
   });
 });

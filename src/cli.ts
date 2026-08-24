@@ -4,10 +4,11 @@ import { REGISTRY, applyModelLimits } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
-  defaultUsagePath, mergedProviderCaps,
+  defaultUsagePath, defaultMalformedPath, mergedProviderCaps,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
+import { bindMalformedFile } from "./malformed.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
 function fmtCompact(n: number): string {
@@ -154,6 +155,7 @@ export async function runCli(argv: string[]): Promise<number> {
     const providers = activeProviders(cfg, env);
     bindStateFile(defaultStatePath()); // spec 4.6: cooldowns/exhaustion survive restarts
     bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
+    bindMalformedFile(defaultMalformedPath()); // quality events survive nothing — append-only log
     const app = buildServer({
       config: cfg,
       providers,

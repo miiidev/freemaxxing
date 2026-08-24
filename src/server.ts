@@ -3,6 +3,8 @@ import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
 import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } from "./usage.js";
+import { validateCompletion, type ToolSpec } from "./toolcall.js";
+import { recordMalformed } from "./malformed.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
@@ -92,7 +94,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }
       throw e;
     }
-    const candidates = resolved.candidates;
+const candidates = resolved.candidates;
+
+    // Determine if this request needs tool validation.
+    const aliasDef = deps.aliases[alias];
+    const needsTools = aliasDef?.requireTools === true || (Array.isArray(body.tools) && body.tools.length > 0);
+    const requestedTools = Array.isArray(body.tools) ? (body.tools as ToolSpec[]) : undefined;
 
     // Per-request closure: records the served call, then flags the model
     // exhausted proactively if its (or its provider's) budget is now spent.
@@ -121,6 +128,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       body,
       stateMap: deps.stateMap,
       fetchImpl: deps.fetchImpl,
+      inspect: needsTools
+        ? async (_entry, upstreamResponse) => {
+            const parsed = (await upstreamResponse.json()) as Record<string, unknown>;
+            const verdict = validateCompletion(parsed, requestedTools);
+            return verdict.ok ? undefined : verdict.reason;
+          }
+        : undefined,
+      onMalformed: needsTools
+        ? (modelId, reason) => recordMalformed(modelId, reason)
+        : undefined,
     });
 
     if (!result.ok) {

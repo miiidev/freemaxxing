@@ -41,6 +41,9 @@ export function defaultEnvPath(): string {
 export function defaultUsagePath(): string {
   return path.join(os.homedir(), ".freeroll", "usage.json");
 }
+export function defaultMalformedPath(): string {
+  return path.join(os.homedir(), ".freeroll", "malformed.jsonl");
+}
 
 export function parseEnvFile(text: string): Record<string, string> {
   const out: Record<string, string> = {};
