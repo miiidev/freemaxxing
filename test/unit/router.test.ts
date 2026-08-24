@@ -204,3 +204,34 @@ describe("provider-level blocking", () => {
     expect(resolved.candidates.map((x) => x.id)).toEqual(["b::two"]);
   });
 });
+
+describe("reliability demotion", () => {
+  const REL_CTX = (
+    scores: Record<string, { score: number | null; samples: number }>,
+    cfg = { minSamples: 2, demoteBelow: 0.85 },
+  ) => ({
+    ...CTX,
+    harvest: true as const,
+    now: DAY,
+    getUsage: () => undefined,
+    getReliability: (id: string) => scores[id],
+    reliabilityCfg: cfg,
+  });
+
+  it("low-score tier-1 model sinks below fresh tier-3 model", () => {
+    const scores = { "a::one": { score: 0.5, samples: 9 } };
+    const { candidates } = resolve("auto/coding", BUILT_IN_ALIASES, LIMITED, () => OK, REL_CTX(scores));
+    expect(candidates.map((x) => x.id)).toEqual(["b::two", "a::one"]);
+  });
+
+  it("under-sampled models keep static ranking (no new-model penalty)", () => {
+    const scores = { "a::one": { score: 0.5, samples: 1 } };
+    const { candidates } = resolve("auto/coding", BUILT_IN_ALIASES, LIMITED, () => OK, REL_CTX(scores));
+    expect(candidates.map((x) => x.id)).toEqual(["a::one", "b::two"]);
+  });
+
+  it("no reliability data at all -> untouched ordering", () => {
+    const { candidates } = resolve("auto/coding", BUILT_IN_ALIASES, LIMITED, () => OK, REL_CTX({}));
+    expect(candidates.map((x) => x.id)).toEqual(["a::one", "b::two"]);
+  });
+});

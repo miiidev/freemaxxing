@@ -1,6 +1,7 @@
 import type { AliasDef, DailyCaps, ModelState, RegistryEntry, RequestCtx, Speed, UsageRecord } from "./types.js";
 import { effective } from "./state.js";
 import { fitsBudget, usedFraction, utcDayKey } from "./usage.js";
+import { isDemoted } from "./reliability.js";
 
 export const SPEED_RANK: Record<Speed, number> = { fast: 0, medium: 1, slow: 2 };
 
@@ -122,17 +123,27 @@ export function resolve(
     );
   };
 
-  // at an equal fraction, unlimited models outrank capped ones
   const limitedKey = (e: RegistryEntry) => (e.limits ? 1 : 0);
+
+  // Self-healing override: proven-flaky models sink below everyone, whatever
+  // their static tier; under-sampled models are never penalized.
+  const demoted = (e: RegistryEntry): number => {
+    if (!ctx.getReliability || !ctx.reliabilityCfg) return 0;
+    const s = ctx.getReliability(e.id);
+    if (!s || s.samples < ctx.reliabilityCfg.minSamples || s.score === null) return 0;
+    return s.score < ctx.reliabilityCfg.demoteBelow ? 1 : 0;
+  };
 
   const cmp = def.preferSpeed
     ? (a: RegistryEntry, b: RegistryEntry) =>
+        demoted(a) - demoted(b) ||
         SPEED_RANK[a.speed] - SPEED_RANK[b.speed] ||
         headroom(a) - headroom(b) ||
         limitedKey(a) - limitedKey(b) ||
         a.tier - b.tier ||
         a.id.localeCompare(b.id)
     : (a: RegistryEntry, b: RegistryEntry) =>
+        demoted(a) - demoted(b) ||
         a.tier - b.tier ||
         headroom(a) - headroom(b) ||
         limitedKey(a) - limitedKey(b) ||

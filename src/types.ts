@@ -61,6 +61,8 @@ export interface RequestCtx {
   getUsage?: (id: string) => UsageRecord | undefined;
   getProviderCaps?: (provider: string) => DailyCaps | undefined;
   getProviderState?: (provider: string) => ModelState | undefined;
+  getReliability?: (id: string) => { score: number | null; samples: number } | undefined;
+  reliabilityCfg?: { minSamples: number; demoteBelow: number };
   now?: number;
 }
 
