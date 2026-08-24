@@ -6,7 +6,7 @@ import {
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, mergedProviderCaps,
 } from "./config.js";
-import { loadState, effective, bindStateFile } from "./state.js";
+import { loadState, effective, bindStateFile, poolKey } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
@@ -21,32 +21,25 @@ export function formatStatusRow(
   msRaw: ModelState,
   now: number,
   usage?: UsageRecord,
-  poolCaps?: DailyCaps,
-  poolTotals?: ProviderTotals,
 ): string {
   const ms = effective(msRaw, now);
   let state: string;
   if (ms.state === "ok") {
     state = "ok";
   } else if (ms.state === "cooldown") {
-    state = `cooldown ${Math.max(0, Math.round((ms.until - now) / 60_000))}m`;
-  } else if (ms.state === "retired") {
-    state = `retired since ${new Date(ms.since).toISOString().slice(0, 16)}Z`;
+    const why = ms.reason ? ` (${ms.reason})` : "";
+    state = `cooldown ${Math.max(0, Math.round((ms.until - now) / 60_000))}m${why}`;
+  } else if (ms.state === "exhausted") {
+    const why = ms.reason ? ` (${ms.reason}) ` : " ";
+    state = `exhausted${why}until ${new Date(ms.until).toISOString().slice(0, 16)}Z`;
   } else {
-    state = `exhausted until ${new Date(ms.until).toISOString().slice(0, 16)}Z`;
+    state = `retired since ${new Date(ms.since).toISOString().slice(0, 16)}Z`;
   }
   const parts: string[] = [];
   if (e.limits && usage) {
     if (e.limits.rpd) parts.push(`req ${usage.requests}/${fmtCompact(e.limits.rpd)}`);
     if (e.limits.tpd) {
       parts.push(`tok ${fmtCompact(usage.tokensIn + usage.tokensOut)}/${fmtCompact(e.limits.tpd)}`);
-    }
-  }
-  // provider pools are account-wide: show them even when the model itself is unseeded
-  if (poolCaps && poolTotals) {
-    if (poolCaps.rpd) parts.push(`pool ${poolTotals.requests}/${fmtCompact(poolCaps.rpd)}`);
-    else if (poolCaps.tpd) {
-      parts.push(`pool ${fmtCompact(poolTotals.tokensIn + poolTotals.tokensOut)}/${fmtCompact(poolCaps.tpd)}`);
     }
   }
   const usageCol = parts.length > 0 ? parts.join(" · ") : "req -";
@@ -56,9 +49,35 @@ export function formatStatusRow(
     e.speed.padEnd(7),
     e.tools ? "tools" : "-",
     String(e.context).padStart(7),
-    state.padEnd(28),
+    state.padEnd(34),
     usageCol.padEnd(18),
     e.tags.join(","),
+  ].join("  ");
+}
+
+export function formatPoolLine(
+  provider: string,
+  caps: DailyCaps,
+  totals: ProviderTotals,
+  msRaw: ModelState,
+  modelCount: number,
+  now: number,
+): string {
+  const ms = effective(msRaw, now);
+  let spent: string;
+  if (caps.rpd) {
+    spent = `req ${totals.requests}/${fmtCompact(caps.rpd)}`;
+  } else {
+    spent = `tok ${fmtCompact(totals.tokensIn + totals.tokensOut)}/${fmtCompact(caps.tpd ?? 0)}`;
+  }
+  // UTC-midnight rollover for every pool profile, so ok pools always read 00:00.
+  const resetAt = ms.state === "exhausted" ? new Date(ms.until).toISOString().slice(11, 16) : "00:00";
+  const st = ms.state === "ok" || ms.state === "exhausted" ? ms.state : String(ms.state);
+  return [
+    `[pool] ${provider.padEnd(12)}`,
+    spent.padEnd(10),
+    `${st} · resets ${resetAt} UTC`,
+    `shared by ${modelCount} model${modelCount === 1 ? " " : "s"}`,
   ].join("  ");
 }
 
@@ -90,19 +109,26 @@ async function printStatus(): Promise<void> {
   }
   console.log("");
   const providerCaps = mergedProviderCaps(cfg);
-  const poolTotalsCache = new Map<string, ProviderTotals>();
+  const groups = new Map<string, RegistryEntry[]>();
   for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
     if (!providers[entry.provider]) continue;
-    // provider totals are shared across a pool's models — compute once per provider
-    let poolTotals: ProviderTotals | undefined;
-    const caps = providerCaps[entry.provider];
+    const list = groups.get(entry.provider) ?? [];
+    list.push(entry);
+    groups.set(entry.provider, list);
+  }
+  const now = Date.now();
+  for (const [provider, entries] of groups) {
+    const caps = providerCaps[provider];
     if (caps) {
-      if (!poolTotalsCache.has(entry.provider)) {
-        poolTotalsCache.set(entry.provider, aggregateProvider(usageMap, entry.provider));
-      }
-      poolTotals = poolTotalsCache.get(entry.provider);
+      console.log(formatPoolLine(
+        provider, caps, aggregateProvider(usageMap, provider),
+        states.get(poolKey(provider)) ?? { state: "ok" }, entries.length, now,
+      ));
     }
-    console.log(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, Date.now(), usageMap.get(entry.id), caps, poolTotals));
+    for (const entry of entries) {
+      console.log("  " + formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id)));
+    }
+    console.log("");
   }
 }
 

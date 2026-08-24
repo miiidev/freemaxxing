@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatStatusRow, runCli, noProvidersHint } from "../../src/cli.js";
+import { formatStatusRow, formatPoolLine, runCli, noProvidersHint } from "../../src/cli.js";
 import type { RegistryEntry, ModelState } from "../../src/types.js";
 
 const E: RegistryEntry = {
@@ -22,6 +22,25 @@ describe("formatStatusRow", () => {
     const ms: ModelState = { state: "exhausted", until: Date.UTC(2026, 7, 23, 0, 0, 0) };
     const row = formatStatusRow(E, ms, NOW);
     expect(row).toContain("exhausted until 2026-08-23T00:00Z");
+  });
+});
+
+describe("reason rendering", () => {
+  it("shows cooldown reason next to remaining minutes", () => {
+    const ms: ModelState = { state: "cooldown", until: NOW + 180_000, reason: "peak-throttle" };
+    expect(formatStatusRow(E, ms, NOW)).toContain("cooldown 3m (peak-throttle)");
+  });
+  it("defaults gracefully when reason absent (legacy snapshots)", () => {
+    const ms: ModelState = { state: "cooldown", until: NOW + 60_000 };
+    expect(formatStatusRow(E, ms, NOW)).toContain("cooldown 1m");
+  });
+  it("shows exhausted reason before the reset timestamp", () => {
+    const ms: ModelState = { state: "exhausted", until: Date.UTC(2026, 7, 25, 0, 0, 0), reason: "pool" };
+    expect(formatStatusRow(E, ms, NOW)).toContain("exhausted (pool) until 2026-08-25T00:00Z");
+  });
+  it("renders retired with since timestamp", () => {
+    const ms: ModelState = { state: "retired", since: Date.UTC(2026, 7, 24, 9, 30, 0) };
+    expect(formatStatusRow(E, ms, NOW)).toContain("retired since 2026-08-24T09:30Z");
   });
 });
 
@@ -54,29 +73,29 @@ describe("formatStatusRow usage column", () => {
   });
 });
 
-describe("formatStatusRow provider pool column", () => {
-  const TOTALS = { requests: 1, tokensIn: 70, tokensOut: 5 };
-
-  it("renders pool spend for rpd-seeded providers", () => {
-    const row = formatStatusRow(E, { state: "ok" }, NOW, undefined, { rpd: 1000 }, TOTALS);
-    expect(row).toContain("pool 1/1k");
+describe("formatPoolLine", () => {
+  const TOTALS = { requests: 23, tokensIn: 70, tokensOut: 5 };
+  it("renders request-based pools with shared-by count", () => {
+    const line = formatPoolLine("openrouter", { rpd: 50 }, TOTALS, { state: "ok" }, 12, NOW);
+    expect(line).toContain("[pool] openrouter");
+    expect(line).toContain("req 23/50");
+    expect(line).toContain("shared by 12 models");
   });
-
-  it("renders pool token spend for tpd-seeded providers", () => {
-    const row = formatStatusRow(E, { state: "ok" }, NOW, undefined, { tpd: 1000000 }, TOTALS);
-    expect(row).toContain("pool 75/1M");
+  it("renders token-based pools", () => {
+    const line = formatPoolLine("cerebras", { tpd: 1000000 },
+      { requests: 2, tokensIn: 900000, tokensOut: 100000 }, { state: "ok" }, 3, NOW);
+    expect(line).toContain("tok 1M/1M");
   });
-
-  it("joins model and pool segments", () => {
-    const half: RegistryEntry = { ...E, limits: { rpd: 50 } };
-    const row = formatStatusRow(half, { state: "ok" }, NOW,
-      { day: "2026-08-23", requests: 2, tokensIn: 0, tokensOut: 0 }, { rpd: 1000 }, TOTALS);
-    expect(row).toContain("req 2/50");
-    expect(row).toContain("pool 1/1k");
+  it("shows exhausted state with UTC reset time", () => {
+    const ms: ModelState = { state: "exhausted", until: Date.UTC(2026, 7, 25, 0, 0, 0), reason: "pool" };
+    const line = formatPoolLine("openrouter", { rpd: 50 },
+      { requests: 50, tokensIn: 0, tokensOut: 0 }, ms, 12, NOW);
+    expect(line).toContain("exhausted · resets 00:00 UTC");
   });
-
-  it("stays dash without pool caps even when totals exist", () => {
-    expect(formatStatusRow(E, { state: "ok" }, NOW, undefined, undefined, TOTALS)).toContain("req -");
+  it("singularizes a single shared model", () => {
+    const line = formatPoolLine("x", { rpd: 5 },
+      { requests: 0, tokensIn: 0, tokensOut: 0 }, { state: "ok" }, 1, NOW);
+    expect(line).toContain("shared by 1 model ");
   });
 });
 
