@@ -30,6 +30,8 @@ export function formatStatusRow(
     state = "ok";
   } else if (ms.state === "cooldown") {
     state = `cooldown ${Math.max(0, Math.round((ms.until - now) / 60_000))}m`;
+  } else if (ms.state === "retired") {
+    state = `retired since ${new Date(ms.since).toISOString().slice(0, 16)}Z`;
   } else {
     state = `exhausted until ${new Date(ms.until).toISOString().slice(0, 16)}Z`;
   }
