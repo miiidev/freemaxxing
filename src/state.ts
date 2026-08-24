@@ -31,9 +31,16 @@ export function applyFailure(
   now: number,
 ): ModelState {
   if (f.kind === "quota") {
-    return { state: "exhausted", until: nextUtcMidnight(now) };
+    return { state: "exhausted", until: nextUtcMidnight(now), reason: "daily-cap" };
   }
-  return { state: "cooldown", until: now + (f.retryAfterMs ?? DEFAULT_COOLDOWN_MS) };
+  if (f.kind === "rate") {
+    return {
+      state: "cooldown",
+      until: now + (f.retryAfterMs ?? DEFAULT_COOLDOWN_MS),
+      reason: "peak-throttle",
+    };
+  }
+  return { state: "cooldown", until: now + (f.retryAfterMs ?? DEFAULT_COOLDOWN_MS), reason: "transient" };
 }
 
 export function recordFailure(
@@ -51,6 +58,47 @@ export function recordFailure(
 export function setState(map: StateMap, id: string, ms: ModelState): void {
   map.set(id, ms);
   if (stateFile) saveState(stateFile, map);
+}
+
+// Pool entries live beside model ids; legal because registry ids always
+// contain "::" between two non-empty halves and no provider is named "pool".
+export function poolKey(provider: string): string {
+  return `pool::${provider}`;
+}
+
+export function isProviderBlocked(map: StateMap, provider: string, now: number): boolean {
+  const ms = map.get(poolKey(provider));
+  if (!ms) return false;
+  return effective(ms, now).state !== "ok";
+}
+
+export function recordPoolExhaustion(
+  map: StateMap,
+  provider: string,
+  _reset: ResetProfile,
+  now: number,
+): void {
+  setState(map, poolKey(provider), {
+    state: "exhausted",
+    until: nextUtcMidnight(now),
+    reason: "pool",
+  });
+}
+
+export function retireModel(map: StateMap, id: string, now: number): void {
+  setState(map, id, { state: "retired", since: now });
+}
+
+export function reviveMatching(map: StateMap, target: string): string[] {
+  const removed: string[] = [];
+  for (const id of [...map.keys()]) {
+    if (id === target || id === poolKey(target)) {
+      map.delete(id);
+      removed.push(id);
+    }
+  }
+  if (removed.length > 0 && stateFile) saveState(stateFile, map);
+  return removed;
 }
 
 export function saveState(file: string, map: StateMap): void {

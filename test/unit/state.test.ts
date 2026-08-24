@@ -26,19 +26,22 @@ describe("effective (lazy expiry)", () => {
 describe("applyFailure", () => {
   it("rate -> cooldown honoring retryAfterMs", () => {
     expect(applyFailure({ state: "ok" }, { kind: "rate", retryAfterMs: 5000 }, RESET, T0))
-      .toEqual({ state: "cooldown", until: T0 + 5000 });
+      .toEqual({ state: "cooldown", until: T0 + 5000, reason: "peak-throttle" });
   });
   it("rate -> cooldown default 60s without retryAfterMs", () => {
     expect(applyFailure({ state: "ok" }, { kind: "rate" }, RESET, T0))
-      .toEqual({ state: "cooldown", until: T0 + 60_000 });
+      .toEqual({ state: "cooldown", until: T0 + 60_000, reason: "peak-throttle" });
   });
   it("quota -> exhausted at next UTC midnight", () => {
     const ms = applyFailure({ state: "ok" }, { kind: "quota" }, RESET, T0);
     expect(ms.until).toBe(nextUtcMidnight(T0));
   });
+  it("quota -> daily-cap reason", () => {
+    expect(applyFailure({ state: "ok" }, { kind: "quota" }, RESET, T0).reason).toBe("daily-cap");
+  });
   it("outage -> cooldown default", () => {
     expect(applyFailure({ state: "ok" }, { kind: "outage" }, RESET, T0))
-      .toEqual({ state: "cooldown", until: T0 + 60_000 });
+      .toEqual({ state: "cooldown", until: T0 + 60_000, reason: "transient" });
   });
 });
 

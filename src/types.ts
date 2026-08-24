@@ -1,6 +1,9 @@
 export type Speed = "fast" | "medium" | "slow";
 
-export type FailureKind = "rate" | "quota" | "outage" | "bad_request";
+export type FailureKind = "rate" | "quota" | "outage" | "bad_request" | "retired";
+
+export type CooldownReason = "peak-throttle" | "transient";
+export type ExhaustReason = "pool" | "daily-cap";
 
 export interface Failure {
   kind: FailureKind;
@@ -33,8 +36,9 @@ export interface RegistryEntry {
 
 export type ModelState =
   | { state: "ok" }
-  | { state: "cooldown"; until: number }
-  | { state: "exhausted"; until: number };
+  | { state: "cooldown"; until: number; reason?: CooldownReason }
+  | { state: "exhausted"; until: number; reason?: ExhaustReason }
+  | { state: "retired"; since: number };
 
 export interface AttemptRecord {
   model: string;
