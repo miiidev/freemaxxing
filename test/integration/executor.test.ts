@@ -347,3 +347,71 @@ describe("failure taxonomy", () => {
     expect(stateMap.get("groq::a")).toMatchObject({ state: "cooldown", reason: "peak-throttle" });
   });
 });
+
+const TOOL_BODY = {
+  messages: [],
+  tools: [{ type: "function", function: { name: "patch" } }],
+};
+
+describe("inspect hook (malformed output)", () => {
+  const bodyWithTools = {
+    messages: [],
+    tools: [{ type: "function", function: { name: "patch" } }],
+  };
+
+  it("fails over silently when inspection rejects the response", async () => {
+    let inspected = 0;
+    const fetchImpl = (async (_url: string | URL, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body));
+      return jsonResponse(200, { id: sent.model, choices: [] });
+    }) as unknown as typeof fetch;
+
+    const res = await execute({
+      candidates: [A, B], providers: { groq: P_GROQ },
+      body: bodyWithTools, stateMap: new Map(), fetchImpl,
+      inspect: async (_entry, response) => {
+        inspected++;
+        const j = await response.json() as { id: string };
+        return j.id === "a" ? "tool_calls[0]:arguments-not-json" : undefined;
+      },
+      onMalformed: () => {},
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.servedBy.id).toBe("groq::b");
+    expect(inspected).toBe(2);
+    expect(res.attempts.map((a) => a.reason)).toEqual(["malformed tool_calls[0]:arguments-not-json"]);
+  });
+
+  it("does not write health state for malformed output", async () => {
+    const stateMap = new Map();
+    const fetchImpl = (async () => jsonResponse(200, { id: "x", choices: [] })) as unknown as typeof fetch;
+    await execute({
+      candidates: [A], providers: { groq: P_GROQ },
+      body: bodyWithTools, stateMap, fetchImpl,
+      inspect: async () => "cutoff-length",
+    });
+    expect(stateMap.size).toBe(0);
+  });
+
+  it("skips inspection for streaming requests", async () => {
+    let inspected = 0;
+    const fetchImpl = (async () => jsonResponse(200, { id: "x", choices: [] })) as unknown as typeof fetch;
+    await execute({
+      candidates: [A], providers: { groq: P_GROQ },
+      body: { ...bodyWithTools, stream: true }, stateMap: new Map(), fetchImpl,
+      inspect: async () => { inspected++; return "cutoff-length"; },
+    });
+    expect(inspected).toBe(0);
+  });
+
+  it("an inspect crash serves the response anyway", async () => {
+    const fetchImpl = (async () => jsonResponse(200, { id: "x", choices: [] })) as unknown as typeof fetch;
+    const res = await execute({
+      candidates: [A], providers: { groq: P_GROQ },
+      body: bodyWithTools, stateMap: new Map(), fetchImpl,
+      inspect: async () => { throw new Error("boom"); },
+    });
+    expect(res.ok).toBe(true);
+  });
+});

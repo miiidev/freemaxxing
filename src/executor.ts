@@ -16,6 +16,8 @@ export interface ExecuteArgs {
   providerCaps?: Record<string, DailyCaps>;
   retryBackoffMs?: number;
   sleepImpl?: (ms: number) => Promise<void>;
+  inspect?: (entry: RegistryEntry, response: Response) => Promise<string | undefined>;
+  onMalformed?: (modelId: string, reason: string) => void;
 }
 
 export type ExecuteResult =
@@ -104,6 +106,19 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
 
     const first = await attemptOnce(entry, provider, args.body, fetchImpl, ttfb);
     if (first.kind === "ok") {
+      // Quality gate runs only where failover is still legal: no bytes sent.
+      if (args.inspect && args.body.stream !== true) {
+        try {
+          const reason = await args.inspect(entry, first.response.clone());
+          if (reason !== undefined) {
+            args.onMalformed?.(entry.id, reason);
+            attempts.push({ model: entry.id, reason: `malformed ${reason}` });
+            continue;
+          }
+        } catch {
+          // a broken inspector must not break serving
+        }
+      }
       return { ok: true, response: first.response, servedBy: entry, attempts };
     }
     pushAttempt(attempts, entry.id, first);
