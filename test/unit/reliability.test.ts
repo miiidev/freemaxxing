@@ -7,6 +7,7 @@ import {
   recordOutcome, saveReliability, pruneEvents, stats, isDemoted,
   type ReliabilityMap, type ReliabilityConfig, type OutcomeEvent,
 } from "../../src/reliability.js";
+import { loadConfig, defaultReliabilityPath } from "../../src/config.js";
 
 const T0 = Date.UTC(2026, 7, 24, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
@@ -94,5 +95,32 @@ describe("persistence edge cases", () => {
     saveReliability(file, map, DEFAULT_RELIABILITY, T0);
     expect(loadReliability(file, T0 + DAY).get("m::a")).toEqual([ev({})]);
     expect(fs.existsSync(`${file}.tmp`)).toBe(false);
+  });
+});
+
+describe("config reliability block", () => {
+  it("defaults when absent", () => {
+    const cfg = loadConfig(null);
+    expect(cfg.reliability).toEqual(DEFAULT_RELIABILITY);
+  });
+
+  it("merges per-field from file with defaults for missing keys", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-cfg-rel-"));
+    const file = path.join(dir, "config.json");
+    fs.writeFileSync(file, JSON.stringify({ reliability: { demoteBelow: 0.5 } }));
+    const cfg = loadConfig(file);
+    expect(cfg.reliability).toEqual({ windowSize: 200, minSamples: 10, demoteBelow: 0.5 });
+  });
+
+  it("ignores invalid values instead of throwing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-cfg-rel2-"));
+    const file = path.join(dir, "config.json");
+    fs.writeFileSync(file, JSON.stringify({ reliability: { windowSize: -5, minSamples: "x" } }));
+    const cfg = loadConfig(file);
+    expect(cfg.reliability).toEqual(DEFAULT_RELIABILITY);
+  });
+
+  it("defaultReliabilityPath lands in ~/.freeroll", () => {
+    expect(defaultReliabilityPath().replace(/\\/g, "/")).toMatch(/\.freeroll\/reliability\.json$/);
   });
 });

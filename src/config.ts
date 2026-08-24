@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { PROVIDERS } from "./catalog.js";
 import { BUILT_IN_ALIASES } from "./router.js";
+import { DEFAULT_RELIABILITY, type ReliabilityConfig } from "./reliability.js";
 import type { AliasDef, DailyCaps, ProviderDef } from "./types.js";
 
 export interface AppConfig {
@@ -14,6 +15,7 @@ export interface AppConfig {
   harvest: boolean;
   modelLimits: Record<string, Partial<DailyCaps>>;
   providerLimits: Record<string, Partial<DailyCaps>>;
+  reliability: ReliabilityConfig;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -43,6 +45,9 @@ export function defaultUsagePath(): string {
 }
 export function defaultMalformedPath(): string {
   return path.join(os.homedir(), ".freeroll", "malformed.jsonl");
+}
+export function defaultReliabilityPath(): string {
+  return path.join(os.homedir(), ".freeroll", "reliability.json");
 }
 
 export function parseEnvFile(text: string): Record<string, string> {
@@ -80,6 +85,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     harvest: true,
     modelLimits: {},
     providerLimits: {},
+    reliability: { ...DEFAULT_RELIABILITY },
     providers: Object.fromEntries(
       Object.entries(DEFAULT_ENV_KEYS).map(([name, envKey]) => [name, { apiKeyEnv: envKey }]),
     ),
@@ -95,6 +101,14 @@ export function loadConfig(configPath: string | null): AppConfig {
     }
     if (raw.providerLimits && typeof raw.providerLimits === "object") {
       cfg.providerLimits = raw.providerLimits as AppConfig["providerLimits"];
+    }
+    if (raw.reliability && typeof raw.reliability === "object") {
+      const r = raw.reliability as Partial<ReliabilityConfig>;
+      if (typeof r.windowSize === "number" && r.windowSize > 0) cfg.reliability.windowSize = r.windowSize;
+      if (typeof r.minSamples === "number" && r.minSamples >= 0) cfg.reliability.minSamples = r.minSamples;
+      if (typeof r.demoteBelow === "number" && r.demoteBelow > 0 && r.demoteBelow <= 1) {
+        cfg.reliability.demoteBelow = r.demoteBelow;
+      }
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
