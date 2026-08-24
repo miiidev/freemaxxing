@@ -173,3 +173,34 @@ describe("harvest off parity", () => {
     expect(out.candidates[0].id).toBe("z::free");
   });
 });
+
+describe("provider-level blocking", () => {
+  const BLOCKED_EXH: ModelState = { state: "exhausted", until: Number.MAX_SAFE_INTEGER, reason: "pool" };
+  const EXPIRED: ModelState = { state: "exhausted", until: 1, reason: "pool" };
+  const RETIRED_POOL: ModelState = { state: "retired", since: 0 };
+
+  it("drops every candidate of a blocked provider", () => {
+    const resolved = resolve("auto/coding", BUILT_IN_ALIASES, REG, () => OK, {
+      ...CTX,
+      getProviderState: (p) => (p === "a" ? BLOCKED_EXH : undefined),
+    });
+    expect(resolved.candidates.map((x) => x.id)).toEqual(["b::two"]);
+    expect(resolved.skippedByBudget).toEqual([]);
+  });
+
+  it("ignores expired pool blocks (lazy expiry)", () => {
+    const resolved = resolve("auto/coding", BUILT_IN_ALIASES, REG, () => OK, {
+      ...CTX,
+      getProviderState: (p) => (p === "a" ? EXPIRED : undefined),
+    });
+    expect(resolved.candidates.map((x) => x.id)).toEqual(["a::one", "b::two"]);
+  });
+
+  it("honors retired pool entries regardless of time", () => {
+    const resolved = resolve("auto/coding", BUILT_IN_ALIASES, REG, () => OK, {
+      ...CTX,
+      getProviderState: (p) => (p === "a" ? RETIRED_POOL : undefined),
+    });
+    expect(resolved.candidates.map((x) => x.id)).toEqual(["b::two"]);
+  });
+});

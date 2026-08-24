@@ -60,6 +60,7 @@ export interface RequestCtx {
   harvest?: boolean;
   getUsage?: (id: string) => UsageRecord | undefined;
   getProviderCaps?: (provider: string) => DailyCaps | undefined;
+  getProviderState?: (provider: string) => ModelState | undefined;
   now?: number;
 }
 

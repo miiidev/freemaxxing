@@ -1,4 +1,5 @@
 import type { AliasDef, DailyCaps, ModelState, RegistryEntry, RequestCtx, Speed, UsageRecord } from "./types.js";
+import { effective } from "./state.js";
 import { fitsBudget, usedFraction, utcDayKey } from "./usage.js";
 
 export const SPEED_RANK: Record<Speed, number> = { fast: 0, medium: 1, slow: 2 };
@@ -57,7 +58,11 @@ export function resolve(
     (def.minContext === undefined || e.context >= def.minContext) &&
     ctx.estTokens <= Math.floor(e.context * 0.9);
 
-  const stateOk = (e: RegistryEntry) => getState(e.id).state === "ok";
+  const stateOk = (e: RegistryEntry) => {
+    if (getState(e.id).state !== "ok") return false;
+    const ps = ctx.getProviderState?.(e.provider);
+    return !ps || effective(ps, now).state === "ok";
+  };
 
   // provider totals are derived lazily per provider to avoid rescanning per candidate
   const provCache = new Map<string, Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null>();
