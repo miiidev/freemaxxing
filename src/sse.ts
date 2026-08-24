@@ -1,4 +1,5 @@
 import { Transform } from "node:stream";
+import { validateCompletion, type ToolCallVerdict, type ToolSpec } from "./toolcall.js";
 
 export function rewriteModelField(frame: string, modelId: string): string {
   return frame.replace(/"model"\s*:\s*"[^"]*"/g, `"model":"${modelId}"`);
@@ -78,6 +79,84 @@ function annotationFrame(modelId: string): string {
   );
 }
 
+export interface ToolGuardOptions {
+  tools?: ToolSpec[];
+  onVerdict?: (v: ToolCallVerdict) => void;
+}
+
+// Reassembles streamed tool-call deltas, validates the assembled call at
+// stream end, and on failure emits freeroll_error BEFORE the held [DONE] —
+// SSE clients stop reading at [DONE], so the frame must land first.
+export function sseToolCallGuard(opts: ToolGuardOptions): Transform {
+  let buffer = "";
+  let finishReason: string | undefined;
+  const calls = new Map<number, { name: string; args: string }>();
+
+  const absorb = (frame: string): void => {
+    if (!frame.startsWith("data: ") || frame === "data: [DONE]") return;
+    try {
+      const parsed = JSON.parse(frame.slice(6)) as Record<string, unknown>;
+      const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
+      const c0 = choices?.[0];
+      if (!c0) return;
+      if (typeof c0.finish_reason === "string") finishReason = c0.finish_reason;
+      const delta = c0.delta as Record<string, unknown> | undefined;
+      const deltas = delta?.tool_calls as Array<Record<string, unknown>> | undefined;
+      for (const d of Array.isArray(deltas) ? deltas : []) {
+        const idx = typeof d.index === "number" ? d.index : 0;
+        const entry = calls.get(idx) ?? { name: "", args: "" };
+        const fn = d.function as { name?: unknown; arguments?: unknown } | undefined;
+        if (fn && typeof fn.name === "string") entry.name = fn.name;
+        if (fn && typeof fn.arguments === "string") entry.args += fn.arguments;
+        calls.set(idx, entry);
+      }
+    } catch {
+      // malformed JSON — pass through
+    }
+  };
+
+  return new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      buffer += chunk.toString();
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        absorb(part);
+        // hold [DONE] until the flush-time verdict
+        if (part !== "data: [DONE]") this.push(part + "\n\n");
+      }
+      cb();
+    },
+    flush(cb) {
+      if (buffer.length > 0) {
+        absorb(buffer);
+        if (buffer !== "data: [DONE]") this.push(buffer);
+        buffer = "";
+      }
+      const assembled = {
+        choices: [{
+          finish_reason: finishReason,
+          message: {
+            tool_calls: [...calls.entries()]
+              .sort(([a], [b]) => a - b)
+              .map(([, c]) => ({ function: { name: c.name, arguments: c.args } })),
+          },
+        }],
+      };
+      const verdict = validateCompletion(assembled, opts.tools);
+      opts.onVerdict?.(verdict);
+      if (!verdict.ok) {
+        this.push(`data: ${JSON.stringify({
+          freeroll_error: "malformed_tool_call",
+          detail: verdict.reason,
+        })}\n\n`);
+      }
+      this.push("data: [DONE]\n\n");
+      cb();
+    },
+  });
+}
+
 export interface CapturedUsage {
   tokensIn: number;
   tokensOut: number;
@@ -120,4 +199,9 @@ export function sseUsageCapture(onUsage: (u: CapturedUsage) => void): Transform 
       cb();
     },
   });
+}
+
+export interface CapturedUsage {
+  tokensIn: number;
+  tokensOut: number;
 }
