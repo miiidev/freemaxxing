@@ -4,11 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildServer } from "./server.js";
 import { REGISTRY, applyModelLimits } from "./catalog.js";
+import { probeLocal } from "./local.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
-  type AppConfig,
+  type AppConfig, type LocalConfig, DEFAULT_LOCAL,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
@@ -89,6 +90,12 @@ export function formatPoolLine(
     `${st} · resets ${resetAt} UTC`,
     `shared by ${modelCount} model${modelCount === 1 ? " " : "s"}`,
   ].join("  ");
+}
+
+export function formatLocalLine(local: LocalConfig, reachable: boolean): string {
+  if (!local.enabled) return "local \u2014 not configured";
+  const flavor = local.endpoint.includes(":11434") ? "ollama" : "custom";
+  return `local (${flavor}) \u2014 ${local.model} \u2014 ${reachable ? "available" : "unreachable"}`;
 }
 
 // First-run guidance: a fresh user with zero keys gets the wizard, everyone
@@ -206,6 +213,7 @@ async function printStatus(): Promise<void> {
     }
     console.log("");
   }
+  console.log(formatLocalLine(cfg.local ?? DEFAULT_LOCAL, await probeLocal(cfg.local ?? DEFAULT_LOCAL)));
 }
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -249,6 +257,7 @@ export async function runCli(argv: string[]): Promise<number> {
       usageMap: loadUsage(defaultUsagePath()),
       providerCaps: mergedProviderCaps(cfg),
       reliabilityMap: loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability),
+      localCfg: cfg.local,
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
