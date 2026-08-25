@@ -24,6 +24,10 @@ export function bindTraceFile(f: string | null): void {
   file = f;
 }
 
+export function getTraceFile(): string | null {
+  return file;
+}
+
 export function tracesEnabled(): boolean {
   return file !== null;
 }

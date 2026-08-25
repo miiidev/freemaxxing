@@ -9,7 +9,7 @@ import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
-  defaultSpendPath,
+  defaultSpendPath, defaultTracePath,
   type AppConfig, type LocalConfig, DEFAULT_LOCAL,
 } from "./config.js";
 import { loadSpend, fileSpendStore } from "./spend.js";
@@ -21,6 +21,7 @@ import {
   loadReliability, bindReliabilityFile, stats, isDemoted,
   type ReliabilityMap,
 } from "./reliability.js";
+import { loadTraces, formatTrace, formatTraceList, bindTraceFile, getTraceFile } from "./trace.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
 function fmtCompact(n: number): string {
@@ -135,6 +136,34 @@ export function reviveCmd(target: string, statePath: string): { removed: string[
   return { removed };
 }
 
+function traceCmd(argv: string[]): number {
+  const json = argv.includes("--json");
+  const traceFile = getTraceFile() ?? defaultTracePath();
+  const records = loadTraces(traceFile);
+  if (argv.includes("--last")) {
+    const lastIdx = argv.indexOf("--last");
+    const nRaw = argv[lastIdx + 1];
+    const n = nRaw && /^\d+$/.test(nRaw) ? Number(nRaw) : 20;
+    const list = records.slice(-n);
+    if (json) process.stdout.write(`${JSON.stringify(list, null, 2)}\n`);
+    else for (const line of formatTraceList(list)) process.stdout.write(`${line}\n`);
+    return 0;
+  }
+  const id = argv.slice(1).find((a) => !a.startsWith("-"));
+  if (!id) {
+    process.stderr.write("usage: maxout trace <request-id | --last [N]> [--json]\n");
+    return 64;
+  }
+  const rec = records.find((r) => r.requestId === id);
+  if (!rec) {
+    process.stderr.write(`no trace for '${id}'\n`);
+    return 1;
+  }
+  if (json) process.stdout.write(`${JSON.stringify(rec, null, 2)}\n`);
+  else process.stdout.write(`${formatTrace(rec)}\n`);
+  return 0;
+}
+
 export function buildExportSnapshot(
   cfg: AppConfig,
   registryIds: Array<{ id: string }>,
@@ -246,6 +275,10 @@ export async function runCli(argv: string[]): Promise<number> {
     return exportStatsCmd(argv);
   }
 
+  if (cmd === "trace") {
+    return traceCmd(argv);
+  }
+
   if (cmd === "serve") {
     const cfg = loadConfig(defaultConfigPath());
     let env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
@@ -262,6 +295,8 @@ export async function runCli(argv: string[]): Promise<number> {
     bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
     bindMalformedFile(defaultMalformedPath()); // quality events survive nothing — append-only log
     bindReliabilityFile(defaultReliabilityPath()); // outcomes survive restarts like usage counters
+    bindTraceFile(defaultTracePath());
+    const argv = process.argv.slice(2);
     const app = buildServer({
       config: cfg,
       providers,
@@ -273,6 +308,7 @@ export async function runCli(argv: string[]): Promise<number> {
       reliabilityMap: loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability),
       localCfg: cfg.local,
       spend: fileSpendStore(defaultSpendPath()),
+      liveTraceLog: argv.includes("--trace"),
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
@@ -315,7 +351,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: maxout [serve|status|setup|export-stats|revive]\n");
+  process.stderr.write("usage: maxout [serve|status|setup|trace|export-stats|revive]\n");
   return 64;
 }
 

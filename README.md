@@ -82,6 +82,9 @@ Every response carries the actual serving model in its `model` field and the
 `x-maxout-served-by` header. Failover happens only before the first streamed
 byte; mid-stream failures surface as a `maxout_error` SSE frame.
 
+- **Routing you can audit** — every request gets an id (`x-maxout-request-id`); `maxout trace <id>` shows the full candidate list, each skip reason, and why the winner won. Last 500 requests kept locally; prompts and responses are never recorded.
+- **Live trace** — run `maxout serve --trace` to stream one-line routing decisions to stderr while serving.
+
 ### Seeing which model answered
 
 By default Maxout appends a credit line to every text reply so you can see
