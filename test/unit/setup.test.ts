@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { SETUP_PROVIDERS, buildEnvContent, validateKey } from "../../src/setup.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Readable, Writable } from "node:stream";
+import { SETUP_PROVIDERS, buildEnvContent, validateKey, runSetup } from "../../src/setup.js";
 
 describe("SETUP_PROVIDERS", () => {
   it("recommends groq first", () => {
@@ -70,5 +74,98 @@ describe("validateKey", () => {
     const fetchBoom = (async () => { throw new Error("dns fail"); }) as unknown as typeof fetch;
     expect(await validateKey("https://x.test/v1", "k", fetchBoom))
       .toEqual({ ok: false, detail: "dns fail" });
+  });
+});
+function tmpEnvPath(): string {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-setup-")), ".env");
+}
+
+const goodFetch = (async (_url: string | URL, init?: RequestInit) => {
+  const auth = (init?.headers as Record<string, string>)?.authorization ?? "";
+  return new Response("{}", { status: auth.endsWith("good") ? 200 : 401 });
+}) as unknown as typeof fetch;
+
+async function interact(script: string[], opts: Partial<Parameters<typeof runSetup>[0]> = {}) {
+  const chunks: string[] = [];
+  const input = new Readable({ read() {} });
+  const output = new Writable({
+    write(c: Buffer, _enc, cb) { chunks.push(c.toString()); cb(); },
+  });
+  const envPath = tmpEnvPath();
+  let resolveDone!: (code: number) => void;
+  const done = new Promise<number>((r) => { resolveDone = r; });
+  void runSetup({
+    envPath,
+    interactive: true,
+    input,
+    output,
+    fetchImpl: goodFetch,
+    ...opts,
+  }).then(resolveDone);
+  // feed lines asynchronously so prompts render between them
+  (async () => {
+    for (const line of script) {
+      await new Promise<void>((r) => setTimeout(r, 5));
+      input.push(`${line}\n`);
+    }
+    input.push(null); // EOF — unanswered prompts must take defaults
+  })();
+  const code = await done;
+  input.destroy();
+  return { code, text: chunks.join(""), envPath };
+}
+
+describe("runSetup flags path", () => {
+  it("requires both provider and key", async () => {
+    expect(await runSetup({ envPath: tmpEnvPath(), interactive: false })).toBe(64);
+    expect(await runSetup({ envPath: tmpEnvPath(), interactive: false, provider: "groq" })).toBe(64);
+  });
+
+  it("rejects unknown providers", async () => {
+    expect(await runSetup({
+      envPath: tmpEnvPath(), interactive: false, provider: "acme", key: "k",
+    })).toBe(64);
+  });
+
+  it("validates and saves a good key", async () => {
+    const envPath = tmpEnvPath();
+    const code = await runSetup({
+      envPath, interactive: false, provider: "groq", key: "good", fetchImpl: goodFetch,
+    });
+    expect(code).toBe(0);
+    expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=good");
+  });
+
+  it("fails without writing on a bad key", async () => {
+    const envPath = tmpEnvPath();
+    const code = await runSetup({
+      envPath, interactive: false, provider: "groq", key: "bad", fetchImpl: goodFetch,
+    });
+    expect(code).toBe(1);
+    expect(fs.existsSync(envPath)).toBe(false);
+  });
+});
+
+describe("runSetup interactive path", () => {
+  it("takes groq by default, saves the key, declines extras via EOF", async () => {
+    const { code, text, envPath } = await interact(["", "good"]);
+    expect(code).toBe(0);
+    expect(text).toContain("console.groq.com/keys");
+    expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=good");
+  });
+
+  it("retries invalid paste up to three attempts", async () => {
+    const { code, text, envPath } = await interact(["", "nope", "nope", "good"]);
+    expect(code).toBe(0);
+    expect((text.match(/attempt \d\/3/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=good");
+  });
+
+  it("accepts a second provider when answered y", async () => {
+    const { code, envPath } = await interact(["google", "good", "y", "good"]);
+    expect(code).toBe(0);
+    const content = fs.readFileSync(envPath, "utf8");
+    expect(content).toContain("GEMINI_API_KEY=good");
+    expect(content).toContain("GROQ_API_KEY=");
   });
 });
