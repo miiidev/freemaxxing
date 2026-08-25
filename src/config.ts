@@ -6,6 +6,20 @@ import { BUILT_IN_ALIASES } from "./router.js";
 import { DEFAULT_RELIABILITY, type ReliabilityConfig } from "./reliability.js";
 import type { AliasDef, DailyCaps, ProviderDef } from "./types.js";
 
+export interface LocalConfig {
+  enabled: boolean;
+  endpoint: string;
+  model: string;
+  contextWindow: number;
+}
+
+export const DEFAULT_LOCAL: LocalConfig = {
+  enabled: false,
+  endpoint: "http://localhost:11434",
+  model: "qwen2.5-coder:7b",
+  contextWindow: 32768,
+};
+
 export interface AppConfig {
   port: number;
   host: string;
@@ -16,6 +30,7 @@ export interface AppConfig {
   modelLimits: Record<string, Partial<DailyCaps>>;
   providerLimits: Record<string, Partial<DailyCaps>>;
   reliability: ReliabilityConfig;
+  local?: LocalConfig;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -86,6 +101,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     modelLimits: {},
     providerLimits: {},
     reliability: { ...DEFAULT_RELIABILITY },
+    local: { ...DEFAULT_LOCAL },
     providers: Object.fromEntries(
       Object.entries(DEFAULT_ENV_KEYS).map(([name, envKey]) => [name, { apiKeyEnv: envKey }]),
     ),
@@ -108,6 +124,15 @@ export function loadConfig(configPath: string | null): AppConfig {
       if (typeof r.minSamples === "number" && r.minSamples >= 0) cfg.reliability.minSamples = r.minSamples;
       if (typeof r.demoteBelow === "number" && r.demoteBelow > 0 && r.demoteBelow <= 1) {
         cfg.reliability.demoteBelow = r.demoteBelow;
+      }
+    }
+    if (raw.local && typeof raw.local === "object") {
+      const l = raw.local as Partial<LocalConfig>;
+      if (typeof l.enabled === "boolean") cfg.local.enabled = l.enabled;
+      if (typeof l.endpoint === "string" && l.endpoint.startsWith("http")) cfg.local.endpoint = l.endpoint;
+      if (typeof l.model === "string" && l.model.length > 0) cfg.local.model = l.model;
+      if (typeof l.contextWindow === "number" && l.contextWindow > 0) {
+        cfg.local.contextWindow = Math.floor(l.contextWindow);
       }
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
@@ -145,4 +170,21 @@ export function mergedProviderCaps(cfg: AppConfig): Record<string, DailyCaps> {
     out[name] = { ...out[name], ...o };
   }
   return out;
+}
+
+// Setup-wizard escape hatch: JSON-merge one patch into config.json atomically.
+export function mergeConfigPatch(configPath: string, patch: Record<string, unknown>): void {
+  let base: Record<string, unknown> = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      base = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    } catch {
+      base = {};
+    }
+  }
+  const merged = { ...base, ...patch };
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  const tmp = `${configPath}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(merged, null, 2));
+  fs.renameSync(tmp, configPath);
 }
