@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolve, estimateTokens, BUILT_IN_ALIASES, UnknownAliasError } from "../../src/router.js";
+import { resolve, estimateTokens, BUILT_IN_ALIASES, UnknownAliasError, aliasCandidates } from "../../src/router.js";
 import type { RegistryEntry, ModelState } from "../../src/types.js";
 
 const OK: ModelState = { state: "ok" };
@@ -233,5 +233,25 @@ describe("reliability demotion", () => {
   it("no reliability data at all -> untouched ordering", () => {
     const { candidates } = resolve("auto/coding", BUILT_IN_ALIASES, LIMITED, () => OK, REL_CTX({}));
     expect(candidates.map((x) => x.id)).toEqual(["a::one", "b::two"]);
+  });
+});
+
+describe("aliasCandidates", () => {
+  it("returns tag- and tools-eligible entries ignoring state and budget", () => {
+    const out = aliasCandidates(BUILT_IN_ALIASES["auto/coding"], REG, true);
+    expect(out.map((x) => x.id)).toEqual(["a::one", "b::two"]);
+  });
+
+  it("skips non-tool models when tools are required", () => {
+    const reg = [...REG, e({ id: "d::four", provider: "d", upstream: "four", tags: ["coding"], tier: 0, tools: false })];
+    expect(aliasCandidates(BUILT_IN_ALIASES["auto/coding"], reg, true).map((x) => x.id))
+      .toEqual(["a::one", "b::two"]);
+  });
+
+  it("matches resolve()'s pre-context candidate set", () => {
+    const def = BUILT_IN_ALIASES["auto/fast"];
+    const a = aliasCandidates(def, REG, false).map((x) => x.id).sort();
+    const b = resolve("auto/fast", BUILT_IN_ALIASES, REG, () => OK, CTX).candidates.map((x) => x.id).sort();
+    expect(a).toEqual(b);
   });
 });

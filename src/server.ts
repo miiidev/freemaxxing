@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { resolve, estimateTokens, UnknownAliasError } from "./router.js";
+import { resolve, estimateTokens, UnknownAliasError, aliasCandidates } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
 import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } from "./usage.js";
@@ -8,7 +8,8 @@ import { recordMalformed } from "./malformed.js";
 import { recordOutcome, type ReliabilityMap } from "./reliability.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
-import type { ActiveProvider, AppConfig } from "./config.js";
+import { localEntry, localProviderDef, probeLocal } from "./local.js";
+import type { ActiveProvider, AppConfig, LocalConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
 
@@ -22,6 +23,7 @@ export interface ServerDeps {
   usageMap?: UsageMap;
   providerCaps?: Record<string, DailyCaps>;
   reliabilityMap?: ReliabilityMap;
+  localCfg?: LocalConfig;
 }
 
 function err(type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -33,6 +35,23 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   let reqCounter = 0;
   const usageMap = deps.usageMap ?? new Map<string, UsageRecord>();
   const providerCaps = deps.providerCaps ?? {};
+
+  // The local tier exists only when configured; its provider def rides along
+  // so execute() can attempt it like any cloud provider.
+  const providers: Record<string, ActiveProvider> = deps.localCfg?.enabled
+    ? { ...deps.providers, local: localProviderDef(deps.localCfg) }
+    : deps.providers;
+
+  let localProbeMemo: { at: number; ok: boolean } | null = null;
+  const LOCAL_PROBE_TTL_MS = 60_000;
+  const localAvailable = async (now: number): Promise<boolean> => {
+    const lc = deps.localCfg;
+    if (!lc?.enabled) return false;
+    if (localProbeMemo && now - localProbeMemo.at < LOCAL_PROBE_TTL_MS) return localProbeMemo.ok;
+    const ok = await probeLocal(lc, deps.fetchImpl);
+    localProbeMemo = { at: now, ok };
+    return ok;
+  };
 
   app.get("/v1/models", async () => {
     const aliasData = Object.keys(deps.aliases).map((alias) => ({
@@ -96,10 +115,25 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }
       throw e;
     }
-const candidates = resolved.candidates;
+
+    let candidates = resolved.candidates;
+    const aliasDef = deps.aliases[alias];
+
+    // Local tier gate: only after EVERY tag/tools-eligible cloud model is in
+    // a non-OK state — never preferred over available cloud capacity.
+    if (candidates.length === 0 && deps.localCfg?.enabled && aliasDef) {
+      const lc = deps.localCfg;
+      const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+      const eligible = aliasCandidates(aliasDef, deps.registry, hasTools);
+      const blocked = (e: RegistryEntry) =>
+        liveState(e.id).state !== "ok" ||
+        (() => { const ps = liveProviderState(e.provider); return !!ps && ps.state !== "ok"; })();
+      if (eligible.length > 0 && eligible.every(blocked) && (await localAvailable(Date.now()))) {
+        candidates = [localEntry(lc)];
+      }
+    }
 
     // Determine if this request needs tool validation.
-    const aliasDef = deps.aliases[alias];
     const needsTools = aliasDef?.requireTools === true || (Array.isArray(body.tools) && body.tools.length > 0);
     const requestedTools = Array.isArray(body.tools) ? (body.tools as ToolSpec[]) : undefined;
 
@@ -154,7 +188,7 @@ const candidates = resolved.candidates;
 
     const result = await execute({
       candidates,
-      providers: deps.providers,
+      providers,
       body,
       stateMap: deps.stateMap,
       fetchImpl: deps.fetchImpl,

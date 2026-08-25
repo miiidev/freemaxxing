@@ -28,6 +28,20 @@ export function estimateTokens(body: unknown): number {
   return Math.ceil(chars / 4);
 }
 
+// Tag+tools eligibility — also the server's local-fallback gate input, which
+// must consider exactly the set resolve() would have considered pre-context.
+export function aliasCandidates(
+  def: AliasDef,
+  registry: RegistryEntry[],
+  hasTools: boolean,
+): RegistryEntry[] {
+  const tagOk = def.tags?.length
+    ? (e: RegistryEntry) => (def.tags as string[]).some((t) => e.tags.includes(t))
+    : (_e: RegistryEntry) => true;
+  const needsTools = def.requireTools === true || hasTools;
+  return registry.filter(tagOk).filter((e) => (needsTools ? e.tools : true));
+}
+
 export interface ResolveResult {
   candidates: RegistryEntry[];
   skippedByBudget: RegistryEntry[];
@@ -45,15 +59,6 @@ export function resolve(
 
   const harvest = ctx.harvest === true;
   const now = ctx.now ?? Date.now();
-
-  const tagOk =
-    def.tags?.length
-      ? (e: RegistryEntry) => (def.tags as string[]).some((t) => e.tags.includes(t))
-      : (_e: RegistryEntry) => true;
-
-  // Tools requirement: either the alias demands tools, or the request carries tools.
-  const needsTools = def.requireTools === true || ctx.hasTools;
-  const toolsOk = (e: RegistryEntry) => (needsTools ? e.tools : true);
 
   const contextOk = (e: RegistryEntry) =>
     (def.minContext === undefined || e.context >= def.minContext) &&
@@ -102,7 +107,8 @@ export function resolve(
 
   const kept: RegistryEntry[] = [];
   const skippedByBudget: RegistryEntry[] = [];
-  for (const entry of registry.filter(tagOk).filter(toolsOk).filter(contextOk).filter(stateOk)) {
+  const loopInput = aliasCandidates(def, registry, ctx.hasTools);
+  for (const entry of loopInput.filter(contextOk).filter(stateOk)) {
     if (budgetOk(entry)) kept.push(entry);
     else skippedByBudget.push(entry);
   }

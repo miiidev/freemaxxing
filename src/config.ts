@@ -128,11 +128,12 @@ export function loadConfig(configPath: string | null): AppConfig {
     }
     if (raw.local && typeof raw.local === "object") {
       const l = raw.local as Partial<LocalConfig>;
-      if (typeof l.enabled === "boolean") cfg.local.enabled = l.enabled;
-      if (typeof l.endpoint === "string" && l.endpoint.startsWith("http")) cfg.local.endpoint = l.endpoint;
-      if (typeof l.model === "string" && l.model.length > 0) cfg.local.model = l.model;
+      const local = cfg.local!;
+      if (typeof l.enabled === "boolean") local.enabled = l.enabled;
+      if (typeof l.endpoint === "string" && l.endpoint.startsWith("http")) local.endpoint = l.endpoint;
+      if (typeof l.model === "string" && l.model.length > 0) local.model = l.model;
       if (typeof l.contextWindow === "number" && l.contextWindow > 0) {
-        cfg.local.contextWindow = Math.floor(l.contextWindow);
+        local.contextWindow = Math.floor(l.contextWindow);
       }
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
