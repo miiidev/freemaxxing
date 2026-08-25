@@ -12,6 +12,7 @@ import {
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
+import { runSetup, SETUP_PROVIDERS } from "./setup.js";
 import {
   loadReliability, bindReliabilityFile, stats, isDemoted,
   type ReliabilityMap,
@@ -247,6 +248,22 @@ export async function runCli(argv: string[]): Promise<number> {
     });
   }
 
+  if (cmd === "setup") {
+    const flag = (name: string): string | undefined => {
+      const i = argv.indexOf(name);
+      return i >= 0 ? argv[i + 1] : undefined;
+    };
+    const provider = flag("--provider");
+    const key = flag("--key");
+    const envPath = flag("--env") ?? defaultEnvPath();
+    const interactive = provider === undefined && key === undefined;
+    if (!interactive && !SETUP_PROVIDERS.some((p) => p.name === provider)) {
+      process.stderr.write(`unknown provider '${provider}'. options: ${SETUP_PROVIDERS.map((p) => p.name).join(", ")}\n`);
+      return 64;
+    }
+    return runSetup({ envPath, interactive, provider, key });
+  }
+
   if (cmd === "revive") {
     const target = argv[1];
     if (!target) {
@@ -259,7 +276,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: freeroll [serve|status|export-stats|revive]\n");
+  process.stderr.write("usage: freeroll [serve|status|setup|export-stats|revive]\n");
   return 64;
 }
 

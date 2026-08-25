@@ -151,4 +151,21 @@ describe("runCli arg routing", () => {
   it("revive without argument returns 64", async () => {
     expect(await runCli(["revive"])).toBe(64);
   });
+
+  it("setup routes flags to runSetup and propagates its code", async () => {
+    const envPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fr-cli-set-")), ".env");
+    const goodFetch = (async (_url: string | URL, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>)?.authorization ?? "";
+      return new Response("{}", { status: auth.endsWith("ok") ? 200 : 401 });
+    }) as unknown as typeof fetch;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = goodFetch;
+    try {
+      const code = await runCli(["setup", "--provider", "groq", "--key", "gsk_ok", "--env", envPath]);
+      expect(code).toBe(0);
+      expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=gsk_ok");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

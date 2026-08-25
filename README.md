@@ -11,30 +11,32 @@ transparently fails over to the next-best free model.
 
     npm install
     npm run build
+    node dist/cli.js setup
 
-Then give it at least one provider API key (any subset works). Pick one:
+The wizard recommends starting with a **single** provider (Groq — fast signup,
+generous free tier), opens the key page, validates your key with a live call,
+and stores it in `%USERPROFILE%\.freeroll\.env`. Adding more providers later is
+optional bonus capacity — re-run `freeroll setup` anytime.
 
-PowerShell (this session only):
+Scripted equivalent (CI, dotfiles):
 
-    $env:GROQ_API_KEY = "gsk_..."
-    node dist/cli.js serve      # listens on http://127.0.0.1:8787/v1
+    node dist/cli.js setup --provider groq --key gsk_...
 
-cmd.exe (this session only):
+Then point any OpenAI-compatible tool at the server:
 
-    set GROQ_API_KEY=...
-    node dist/cli.js serve
-
-Any shell, persists across sessions — create `%USERPROFILE%\.freeroll\.env`
-(that exact folder) containing one key per line, e.g. `GROQ_API_KEY=gsk_...`.
-
-> Warning: in PowerShell, plain `set NAME=value` does **not** create an
-> environment variable — use `$env:NAME = value`.
-
-Point any OpenAI-compatible tool at the server:
+    node dist/cli.js serve     # http://127.0.0.1:8787/v1
 
     base URL: http://127.0.0.1:8787/v1
     API key:  anything (freeroll does not check client keys)
     model:    auto/coding | auto/fast | auto/any
+
+Prefer manual setup? Any subset of these works as environment variables
+(a `.env` in `~/.freeroll/` is loaded):
+`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
+`CEREBRAS_API_KEY`.
+
+> Warning: in PowerShell, plain `set NAME=value` does **not** create an
+> environment variable — use `$env:NAME = value`.
 
 ## Aliases
 
