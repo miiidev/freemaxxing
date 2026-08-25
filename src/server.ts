@@ -5,6 +5,7 @@ import { formatRequestLog } from "./log.js";
 import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } from "./usage.js";
 import { validateCompletion, type ToolSpec } from "./toolcall.js";
 import { recordMalformed } from "./malformed.js";
+import { recordOutcome, type ReliabilityMap } from "./reliability.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
@@ -20,6 +21,7 @@ export interface ServerDeps {
   fetchImpl?: typeof fetch;
   usageMap?: UsageMap;
   providerCaps?: Record<string, DailyCaps>;
+  reliabilityMap?: ReliabilityMap;
 }
 
 function err(type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -122,6 +124,34 @@ const candidates = resolved.candidates;
       }
     }
 
+    // Reliability outcomes are recorded per served model; absent map = inert.
+    const relMap = deps.reliabilityMap;
+    const relCfg = deps.config.reliability;
+    const note = (servedModelId: string, ok: boolean, startedAt: number, kind?: string) => {
+      if (!relMap) return;
+      recordOutcome(relMap, servedModelId, {
+        ts: Date.now(),
+        ok,
+        ...(kind ? { kind } : {}),
+        latencyMs: Date.now() - startedAt,
+      }, relCfg);
+    };
+
+    // Quality failures count against the model's reliability score too.
+    const onMalformed = needsTools
+      ? (modelId: string, reason: string) => {
+          recordMalformed(modelId, reason);
+          if (relMap) {
+            recordOutcome(relMap, modelId, {
+              ts: Date.now(),
+              ok: false,
+              kind: "malformed",
+              latencyMs: Date.now() - started,
+            }, relCfg);
+          }
+        }
+      : undefined;
+
     const result = await execute({
       candidates,
       providers: deps.providers,
@@ -135,9 +165,7 @@ const candidates = resolved.candidates;
             return verdict.ok ? undefined : verdict.reason;
           }
         : undefined,
-      onMalformed: needsTools
-        ? (modelId, reason) => recordMalformed(modelId, reason)
-        : undefined,
+      onMalformed,
     });
 
     if (!result.ok) {
@@ -170,6 +198,7 @@ const candidates = resolved.candidates;
           message.content += `\n\n---\n*freeroll: ${servedId}*`;
         }
       }
+      note(servedId, true, started);
       return json;
     }
 
@@ -185,16 +214,22 @@ const candidates = resolved.candidates;
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
     const rewriter = sseModelRewriter(servedId);
+    let capturedUsage: { tokensIn: number; tokensOut: number } | undefined;
+    const capture = sseUsageCapture((u) => { capturedUsage = u; });
+
+    let upstreamDied = false;
+    let streamVerdictBad: string | undefined;
     const guard = needsTools
       ? sseToolCallGuard({
           tools: requestedTools,
           onVerdict: (v) => {
-            if (!v.ok) recordMalformed(servedId, v.reason ?? "unknown");
+            if (!v.ok) {
+              streamVerdictBad = v.reason ?? "unknown";
+              recordMalformed(servedId, streamVerdictBad);
+            }
           },
         })
       : undefined;
-    let capturedUsage: { tokensIn: number; tokensOut: number } | undefined;
-    const capture = sseUsageCapture((u) => { capturedUsage = u; });
 
     // Build the transform chain: rewriter -> [guard?] -> capture -> [annotator?] -> reply.raw
     const head = guard ? rewriter.pipe(guard) : rewriter;
@@ -211,6 +246,7 @@ const candidates = resolved.candidates;
       link.on("error", () => {
         if (!reply.raw.writableEnded) {
           if (link === upstream) {
+            upstreamDied = true;
             reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
           }
           reply.raw.end();
@@ -223,8 +259,9 @@ const candidates = resolved.candidates;
         link.on("close", () => resolveDone());
       }
     });
-    // Real totals when the provider sent a usage frame; undefined falls back
-    // to the request-size estimate inside recordServed.
+
+    note(servedId, !upstreamDied && streamVerdictBad === undefined, started,
+      upstreamDied ? "stream-error" : streamVerdictBad !== undefined ? "malformed" : undefined);
     recordServed(result.servedBy, capturedUsage);
     return reply;
   });

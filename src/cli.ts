@@ -4,11 +4,12 @@ import { REGISTRY, applyModelLimits } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
-  defaultUsagePath, defaultMalformedPath, mergedProviderCaps,
+  defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
+import { loadReliability, bindReliabilityFile } from "./reliability.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
 function fmtCompact(n: number): string {
@@ -156,6 +157,7 @@ export async function runCli(argv: string[]): Promise<number> {
     bindStateFile(defaultStatePath()); // spec 4.6: cooldowns/exhaustion survive restarts
     bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
     bindMalformedFile(defaultMalformedPath()); // quality events survive nothing — append-only log
+    bindReliabilityFile(defaultReliabilityPath()); // outcomes survive restarts like usage counters
     const app = buildServer({
       config: cfg,
       providers,
@@ -164,6 +166,7 @@ export async function runCli(argv: string[]): Promise<number> {
       stateMap: loadState(defaultStatePath()),
       usageMap: loadUsage(defaultUsagePath()),
       providerCaps: mergedProviderCaps(cfg),
+      reliabilityMap: loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability),
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;

@@ -243,6 +243,7 @@ describe("proactive pool exhaustion", () => {
 });
 
 import { bindMalformedFile, loadMalformed } from "../../src/malformed.js";
+import { recordOutcome, type ReliabilityMap } from "../../src/reliability.js";
 
 function twoModelRegistry(): RegistryEntry[] {
   return [
@@ -290,7 +291,7 @@ describe("non-streaming tool-call validation", () => {
     ]);
   });
 
-  it("prose replies pass through without events", async () => {
+it("prose replies pass through without events", async () => {
     const fetchImpl = (async () =>
       new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "hi" } }] }), { status: 200 })
     ) as unknown as typeof fetch;
@@ -308,5 +309,81 @@ describe("non-streaming tool-call validation", () => {
     bindMalformedFile(null);
     expect(res.statusCode).toBe(200);
     expect(loadMalformed(path.join(dir, "m.jsonl"))).toEqual([]);
+  });
+});
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+function sseResponse(chunks: string[], errorAfterIndex?: number): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let i = 0; i < chunks.length; i++) {
+        controller.enqueue(encoder.encode(chunks[i]));
+        if (errorAfterIndex !== undefined && i === errorAfterIndex) {
+          controller.error(new Error("boom"));
+          return;
+        }
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
+function relServer(fetchImpl: typeof fetch, relMap: ReliabilityMap) {
+  return buildServer({
+    config: CFG,
+    providers: PROV,
+    aliases: BUILT_IN_ALIASES,
+    registry: [{ ...REGISTRY.find((e) => e.id === "groq::openai/gpt-oss-20b")! }],
+    stateMap: new Map(),
+    fetchImpl,
+    reliabilityMap: relMap,
+  });
+}
+
+describe("reliability recording", () => {
+  it("records ok with latency on non-streaming success", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse(200, { choices: [{ finish_reason: "stop", message: { content: "hi" } }] })
+    ) as unknown as typeof fetch;
+    const relMap: ReliabilityMap = new Map();
+    const app = relServer(fetchImpl, relMap);
+    await app.inject({ method: "POST", url: "/v1/chat/completions",
+      payload: { messages: [{ role: "user", content: "hello" }] } });
+    const events = relMap.get("groq::openai/gpt-oss-20b")!;
+    expect(events).toHaveLength(1);
+    expect(events[0].ok).toBe(true);
+    expect(typeof events[0].latencyMs).toBe("number");
+  });
+
+  it("records stream-error outcome when upstream dies mid-stream", async () => {
+    const fetchImpl = (async () =>
+      sseResponse(['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'], 0)
+    ) as unknown as typeof fetch;
+    const relMap: ReliabilityMap = new Map();
+    const app = relServer(fetchImpl, relMap);
+    await app.inject({ method: "POST", url: "/v1/chat/completions",
+      payload: { stream: true, messages: [{ role: "user", content: "hello" }] } });
+    const events = relMap.get("groq::openai/gpt-oss-20b")!;
+    expect(events[0].ok).toBe(false);
+    expect(events[0].kind).toBe("stream-error");
+  });
+
+  it("records clean streaming close as ok", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl = (async () => sseResponse([sse])) as unknown as typeof fetch;
+    const relMap: ReliabilityMap = new Map();
+    const app = relServer(fetchImpl, relMap);
+    await app.inject({ method: "POST", url: "/v1/chat/completions",
+      payload: { stream: true, messages: [{ role: "user", content: "hello" }] } });
+    expect(relMap.get("groq::openai/gpt-oss-20b")![0].ok).toBe(true);
   });
 });
