@@ -9,6 +9,7 @@ import { recordOutcome, type ReliabilityMap } from "./reliability.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import { localEntry, localProviderDef, probeLocal } from "./local.js";
+import { deriveSessionKey, SessionAffinity } from "./session.js";
 import type { ActiveProvider, AppConfig, LocalConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
@@ -24,6 +25,7 @@ export interface ServerDeps {
   providerCaps?: Record<string, DailyCaps>;
   reliabilityMap?: ReliabilityMap;
   localCfg?: LocalConfig;
+  sessionAffinity?: SessionAffinity;
 }
 
 function err(type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -41,6 +43,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const providers: Record<string, ActiveProvider> = deps.localCfg?.enabled
     ? { ...deps.providers, local: localProviderDef(deps.localCfg) }
     : deps.providers;
+
+  const affinity = deps.sessionAffinity ?? new SessionAffinity();
 
   let localProbeMemo: { at: number; ok: boolean } | null = null;
   const LOCAL_PROBE_TTL_MS = 60_000;
@@ -137,6 +141,23 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }
     }
 
+    // Session stickiness: promote the session's previous model to the front —
+    // sort order bends, filters don't. Failover re-sticks via post-success set().
+    const sKey = aliasDef?.sessionAffinity === true
+      ? deriveSessionKey(request.headers as Record<string, string | string[] | undefined>, body.messages)
+      : undefined;
+    let affinityApplied = false;
+    if (sKey && candidates.length > 1) {
+      const sticky = affinity.get(sKey);
+      if (sticky) {
+        const idx = candidates.findIndex((c) => c.id === sticky);
+        if (idx > 0) {
+          affinityApplied = true;
+          candidates = [candidates[idx], ...candidates.filter((_, i) => i !== idx)];
+        }
+      }
+    }
+
     // Determine if this request needs tool validation.
     const needsTools = aliasDef?.requireTools === true || (Array.isArray(body.tools) && body.tools.length > 0);
     const requestedTools = Array.isArray(body.tools) ? (body.tools as ToolSpec[]) : undefined;
@@ -216,6 +237,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     }
 
     const servedId = result.servedBy.id;
+    if (sKey) affinity.set(sKey, servedId);
     console.log(formatRequestLog(++reqCounter, alias, result.attempts, servedId, Date.now() - started));
 
     if (body.stream !== true) {

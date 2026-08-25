@@ -6,7 +6,7 @@ import { isDemoted } from "./reliability.js";
 export const SPEED_RANK: Record<Speed, number> = { fast: 0, medium: 1, slow: 2 };
 
 export const BUILT_IN_ALIASES: Record<string, AliasDef> = {
-  "auto/coding": { tags: ["coding"], requireTools: true },
+  "auto/coding": { tags: ["coding"], requireTools: true, sessionAffinity: true },
   "auto/fast": { preferSpeed: true },
   "auto/any": {},
 };

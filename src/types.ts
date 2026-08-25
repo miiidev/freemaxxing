@@ -53,6 +53,7 @@ export interface AliasDef {
   requireTools?: boolean;
   minContext?: number;
   preferSpeed?: boolean;
+  sessionAffinity?: boolean;
 }
 
 export interface RequestCtx {
