@@ -5,6 +5,16 @@ import { isDemoted } from "./reliability.js";
 
 export const SPEED_RANK: Record<Speed, number> = { fast: 0, medium: 1, slow: 2 };
 
+export type SkipReason =
+  | "tags" | "tools" | "context-too-small"
+  | "cooldown" | "exhausted" | "retired"
+  | "provider-blocked" | "budget";
+
+export interface ConsideredCandidate {
+  id: string;
+  excludedBy?: SkipReason;
+}
+
 export const BUILT_IN_ALIASES: Record<string, AliasDef> = {
   "auto/coding": { tags: ["coding"], requireTools: true, sessionAffinity: true },
   "auto/fast": { preferSpeed: true },
@@ -46,6 +56,8 @@ export interface ResolveResult {
   candidates: RegistryEntry[];
   skippedByBudget: RegistryEntry[];
   skippedByContext: RegistryEntry[];
+  considered: ConsideredCandidate[];
+  winnerReason: string;
   widened: boolean;
 }
 
@@ -71,10 +83,16 @@ export function resolve(
     (def.minContext === undefined || e.context >= def.minContext) &&
     ctx.estTokens + outReserve(e) <= e.context;
 
-  const stateOk = (e: RegistryEntry) => {
-    if (getState(e.id).state !== "ok") return false;
+  const stateReason = (e: RegistryEntry): SkipReason | undefined => {
+    if (effective(getState(e.id), now).state !== "ok") {
+      const ms = effective(getState(e.id), now);
+      if (ms.state === "cooldown") return "cooldown";
+      if (ms.state === "exhausted") return "exhausted";
+      return "retired";
+    }
     const ps = ctx.getProviderState?.(e.provider);
-    return !ps || effective(ps, now).state === "ok";
+    if (ps && effective(ps, now).state !== "ok") return "provider-blocked";
+    return undefined;
   };
 
   // provider totals are derived lazily per provider to avoid rescanning per candidate
@@ -115,30 +133,52 @@ export function resolve(
   const kept: RegistryEntry[] = [];
   const skippedByBudget: RegistryEntry[] = [];
   const skippedByContext: RegistryEntry[] = [];
-  const loopInput = aliasCandidates(def, registry, ctx.hasTools);
-  for (const entry of loopInput) {
-    if (!contextOk(entry)) {
-      skippedByContext.push(entry);
+  const considered: ConsideredCandidate[] = [];
+
+  const tagOk = (e: RegistryEntry) =>
+    !def.tags?.length || (def.tags as string[]).some((t) => e.tags.includes(t));
+  const needsTools = def.requireTools === true || ctx.hasTools;
+
+  for (const entry of registry) {
+    let excludedBy: SkipReason | undefined;
+    if (!tagOk(entry)) excludedBy = "tags";
+    else if (needsTools && !entry.tools) excludedBy = "tools";
+    else if (!contextOk(entry)) excludedBy = "context-too-small";
+    else excludedBy = stateReason(entry);
+
+    if (excludedBy) {
+      if (excludedBy === "context-too-small") skippedByContext.push(entry);
+      considered.push({ id: entry.id, excludedBy });
       continue;
     }
-    if (!stateOk(entry)) continue;
-    if (budgetOk(entry)) kept.push(entry);
-    else skippedByBudget.push(entry);
+    if (!budgetOk(entry)) {
+      skippedByBudget.push(entry);
+      considered.push({ id: entry.id, excludedBy: "budget" });
+      continue;
+    }
+    kept.push(entry);
+    considered.push({ id: entry.id });
   }
 
-  // A truncated answer beats an error: when nothing fits, give every
-  // context-excluded entry a second chance against the non-context filters.
   let widened = false;
   if (kept.length === 0 && skippedByContext.length > 0) {
+    const reAdmitted = new Set<string>();
     for (const entry of skippedByContext) {
-      if (!stateOk(entry)) continue;
-      if (budgetOk(entry)) kept.push(entry);
-      else skippedByBudget.push(entry);
+      if (stateReason(entry) !== undefined) continue;
+      if (budgetOk(entry)) {
+        kept.push(entry);
+        reAdmitted.add(entry.id);
+      } else {
+        skippedByBudget.push(entry);
+      }
     }
     widened = kept.length > 0;
-    // All context-excluded entries were re-evaluated against non-context
-    // filters; none remain "skipped by context".
     skippedByContext.length = 0;
+    for (let i = 0; i < considered.length; i++) {
+      if (considered[i].excludedBy === "context-too-small" && reAdmitted.has(considered[i].id)) {
+        considered[i] = { id: considered[i].id };
+      }
+    }
   }
 
   const headroom = (e: RegistryEntry) => {
@@ -168,22 +208,30 @@ export function resolve(
     return s.score < ctx.reliabilityCfg.demoteBelow ? 1 : 0;
   };
 
-  const cmp = def.preferSpeed
-    ? (a: RegistryEntry, b: RegistryEntry) =>
-        demoted(a) - demoted(b) ||
-        SPEED_RANK[a.speed] - SPEED_RANK[b.speed] ||
-        headroom(a) - headroom(b) ||
-        limitedKey(a) - limitedKey(b) ||
-        a.tier - b.tier ||
-        a.id.localeCompare(b.id)
-    : (a: RegistryEntry, b: RegistryEntry) =>
-        demoted(a) - demoted(b) ||
-        a.tier - b.tier ||
-        headroom(a) - headroom(b) ||
-        limitedKey(a) - limitedKey(b) ||
-        SPEED_RANK[a.speed] - SPEED_RANK[b.speed] ||
-        a.id.localeCompare(b.id);
+  type LabeledCmp = [label: string, fn: (a: RegistryEntry, b: RegistryEntry) => number];
+  const chain: LabeledCmp[] = def.preferSpeed
+    ? [
+        ["reliability-demoted", (a, b) => demoted(a) - demoted(b)],
+        ["speed", (a, b) => SPEED_RANK[a.speed] - SPEED_RANK[b.speed]],
+        ["headroom", (a, b) => headroom(a) - headroom(b)],
+        ["limited", (a, b) => limitedKey(a) - limitedKey(b)],
+        ["tier", (a, b) => a.tier - b.tier],
+      ]
+    : [
+        ["reliability-demoted", (a, b) => demoted(a) - demoted(b)],
+        ["tier", (a, b) => a.tier - b.tier],
+        ["headroom", (a, b) => headroom(a) - headroom(b)],
+        ["limited", (a, b) => limitedKey(a) - limitedKey(b)],
+        ["speed", (a, b) => SPEED_RANK[a.speed] - SPEED_RANK[b.speed]],
+      ];
+  chain.push(["id-tiebreak", (a, b) => a.id.localeCompare(b.id)]);
 
-  kept.sort(cmp);
-  return { candidates: kept, skippedByBudget, skippedByContext, widened };
+  kept.sort((a, b) => chain.reduce((acc, [, fn]) => acc || fn(a, b), 0));
+
+  let winnerReason = "sole-candidate";
+  if (kept.length > 1) {
+    winnerReason = chain.find(([, fn]) => fn(kept[0], kept[1]) !== 0)?.[0] ?? "id-tiebreak";
+  }
+
+  return { candidates: kept, skippedByBudget, skippedByContext, considered, winnerReason, widened };
 }
