@@ -282,4 +282,9 @@ export async function runCli(argv: string[]): Promise<number> {
 
 const invokedDirectly =
   process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (invokedDirectly) void runCli(process.argv.slice(2));
+if (invokedDirectly) {
+  // Propagate the command's exit code (serve never resolves; it owns the process).
+  void runCli(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
+}

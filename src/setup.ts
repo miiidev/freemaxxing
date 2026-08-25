@@ -105,16 +105,15 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
     output: opts.output ?? process.stdout,
   });
   // Informational text goes straight to the output stream — readline's own
-  // write path is unreliable for non-TTY streams.
+  // write path is unreliable for non-TTY streams. Safe after EOF: only the
+  // interface is dead, not the underlying stream.
   const rawOut = opts.output ?? process.stdout;
   let inputClosed = false;
   const out = (...lines: string[]) => {
-    if (!inputClosed) {
-      try {
-        rawOut.write(lines.join("\n") + "\n");
-      } catch {
-        // output closed between check and write — nothing more to show
-      }
+    try {
+      rawOut.write(lines.join("\n") + "\n");
+    } catch {
+      // output stream closed — nothing more to show
     }
   };
   // EOF (Ctrl-D / scripted streams ending early) must terminate prompts
