@@ -16,6 +16,8 @@ function e(partial: Partial<RegistryEntry>): RegistryEntry {
     tier: partial.tier ?? 2,
     speed: partial.speed ?? "medium",
     context: partial.context ?? 128000,
+    maxOutput: partial.maxOutput,
+    limits: partial.limits,
     tools: partial.tools ?? true,
   };
 }
@@ -53,11 +55,66 @@ describe("resolve", () => {
     expect(out.map((x) => x.id)).not.toContain("d::four");
   });
 
-  it("drops models whose context cannot fit estimated tokens (90% headroom)", () => {
+  it("drops models whose context cannot fit estimated input plus output reserve", () => {
     const reg = [...REG, e({ id: "e::small", provider: "e", upstream: "small", tags: ["coding"], tier: 0, context: 2000 })];
     const resolved = resolve("auto/coding", BUILT_IN_ALIASES, reg, () => OK, { ...CTX, estTokens: 1900 });
-    const out = resolved.candidates;
-    expect(out.map((x) => x.id)).not.toContain("e::small");
+    expect(resolved.candidates.map((x) => x.id)).not.toContain("e::small");
+    expect(resolved.skippedByContext.map((x) => x.id)).toEqual(["e::small"]);
+  });
+
+  describe("context-window awareness", () => {
+    const BIG = { hasTools: false, estTokens: 50_000 };
+
+    it("excludes small-context models from a ~50k-token request", () => {
+      const reg = [
+        e({ id: "tiny::a", provider: "tiny", upstream: "a", tags: ["coding"], tier: 1, context: 32_000 }),
+        e({ id: "big::b", provider: "big", upstream: "b", tags: ["coding"], tier: 2, context: 131_072 }),
+      ];
+      const resolved = resolve("auto/coding", BUILT_IN_ALIASES, reg, () => OK, BIG);
+      expect(resolved.candidates.map((x) => x.id)).toEqual(["big::b"]);
+      expect(resolved.skippedByContext.map((x) => x.id)).toEqual(["tiny::a"]);
+    });
+
+    it("reserves each model's declared maxOutput", () => {
+      const reg = [
+        e({ id: "x::big-out", provider: "x", upstream: "bo", tags: ["chat"], tier: 1, context: 10_000, maxOutput: 8000 }),
+        e({ id: "y::default-out", provider: "y", upstream: "do", tags: ["chat"], tier: 2, context: 10_000 }),
+      ];
+      // estTokens 5000: 5000+8000 > 10000 excludes x; 5000+4096 <= 10000 keeps y
+      const resolved = resolve("auto/any", BUILT_IN_ALIASES, reg, () => OK, { hasTools: false, estTokens: 5000 });
+      expect(resolved.candidates.map((x) => x.id)).toEqual(["y::default-out"]);
+      expect(resolved.skippedByContext.map((x) => x.id)).toEqual(["x::big-out"]);
+    });
+
+    it("widens back to context-excluded candidates instead of returning empty", () => {
+      const reg = [
+        e({ id: "tiny::a", provider: "tiny", upstream: "a", tags: ["coding"], tier: 1, context: 32_000 }),
+        e({ id: "tiny::b", provider: "tiny2", upstream: "b", tags: ["coding"], tier: 2, context: 16_000 }),
+      ];
+      const resolved = resolve("auto/coding", BUILT_IN_ALIASES, reg, () => OK, BIG);
+      expect(resolved.widened).toBe(true);
+      expect(resolved.candidates.map((x) => x.id)).toEqual(["tiny::a", "tiny::b"]);
+      expect(resolved.skippedByContext).toEqual([]);
+    });
+
+    it("widening still honors state and budget filters", () => {
+      const reg = [
+        e({ id: "tiny::dead", provider: "t1", upstream: "d", tags: ["coding"], tier: 1, context: 16_000 }),
+        e({ id: "tiny::spent", provider: "t2", upstream: "s", tags: ["coding"], tier: 2, context: 16_000, limits: { rpd: 5 } }),
+      ];
+      const states: Record<string, ModelState> = { "tiny::dead": COOL };
+      const usage = { "tiny::spent": { day: "2026-08-23", requests: 5, tokensIn: 0, tokensOut: 0 } };
+      const resolved = resolve("auto/coding", BUILT_IN_ALIASES, reg, (id) => states[id] ?? OK, {
+        ...BIG,
+        harvest: true,
+        now: DAY,
+        getUsage: (id) => usage[id],
+      });
+      expect(resolved.widened).toBe(false);
+      expect(resolved.candidates).toEqual([]);
+      expect(resolved.skippedByContext).toEqual([]);
+      expect(resolved.skippedByBudget.map((x) => x.id)).toEqual(["tiny::spent"]);
+    });
   });
 
   it("is deterministic across calls", () => {

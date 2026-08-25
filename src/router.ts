@@ -45,7 +45,13 @@ export function aliasCandidates(
 export interface ResolveResult {
   candidates: RegistryEntry[];
   skippedByBudget: RegistryEntry[];
+  skippedByContext: RegistryEntry[];
+  widened: boolean;
 }
+
+// Requests reserve their model's worst-case output against the window;
+// undeclared outputs assume a modest chat-sized completion.
+export const OUTPUT_RESERVE_DEFAULT = 4096;
 
 export function resolve(
   alias: string,
@@ -60,9 +66,10 @@ export function resolve(
   const harvest = ctx.harvest === true;
   const now = ctx.now ?? Date.now();
 
+  const outReserve = (e: RegistryEntry) => e.maxOutput ?? OUTPUT_RESERVE_DEFAULT;
   const contextOk = (e: RegistryEntry) =>
     (def.minContext === undefined || e.context >= def.minContext) &&
-    ctx.estTokens <= Math.floor(e.context * 0.9);
+    ctx.estTokens + outReserve(e) <= e.context;
 
   const stateOk = (e: RegistryEntry) => {
     if (getState(e.id).state !== "ok") return false;
@@ -107,10 +114,31 @@ export function resolve(
 
   const kept: RegistryEntry[] = [];
   const skippedByBudget: RegistryEntry[] = [];
+  const skippedByContext: RegistryEntry[] = [];
   const loopInput = aliasCandidates(def, registry, ctx.hasTools);
-  for (const entry of loopInput.filter(contextOk).filter(stateOk)) {
+  for (const entry of loopInput) {
+    if (!contextOk(entry)) {
+      skippedByContext.push(entry);
+      continue;
+    }
+    if (!stateOk(entry)) continue;
     if (budgetOk(entry)) kept.push(entry);
     else skippedByBudget.push(entry);
+  }
+
+  // A truncated answer beats an error: when nothing fits, give every
+  // context-excluded entry a second chance against the non-context filters.
+  let widened = false;
+  if (kept.length === 0 && skippedByContext.length > 0) {
+    for (const entry of skippedByContext) {
+      if (!stateOk(entry)) continue;
+      if (budgetOk(entry)) kept.push(entry);
+      else skippedByBudget.push(entry);
+    }
+    widened = kept.length > 0;
+    // All context-excluded entries were re-evaluated against non-context
+    // filters; none remain "skipped by context".
+    skippedByContext.length = 0;
   }
 
   const headroom = (e: RegistryEntry) => {
@@ -157,5 +185,5 @@ export function resolve(
         a.id.localeCompare(b.id);
 
   kept.sort(cmp);
-  return { candidates: kept, skippedByBudget };
+  return { candidates: kept, skippedByBudget, skippedByContext, widened };
 }
