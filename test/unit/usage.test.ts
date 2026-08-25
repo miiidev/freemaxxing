@@ -36,14 +36,14 @@ describe("recordUsage", () => {
     const map: UsageMap = new Map();
     recordUsage(map, "a::m", { requests: 1, tokensIn: 100 }, T0);
     recordUsage(map, "a::m", { requests: 1, tokensIn: 50, tokensOut: 20 }, T0);
-    expect(map.get("a::m")).toEqual({ day: "2026-08-23", requests: 2, tokensIn: 150, tokensOut: 20 });
+    expect(map.get("a::m")).toEqual({ day: "2026-08-23", requests: 2, tokensIn: 150, tokensOut: 20, reqTs: [T0, T0] });
   });
 
   it("lazily rolls over on a new UTC day instead of accumulating", () => {
     const map: UsageMap = new Map();
     recordUsage(map, "a::m", { requests: 5, tokensIn: 9999 }, T0);
     recordUsage(map, "a::m", { requests: 1 }, NEXT_DAY);
-    expect(map.get("a::m")).toEqual({ day: "2026-08-24", requests: 1, tokensIn: 0, tokensOut: 0 });
+    expect(map.get("a::m")).toEqual({ day: "2026-08-24", requests: 1, tokensIn: 0, tokensOut: 0, reqTs: [NEXT_DAY] });
   });
 
   it("persists through bindUsageFile and reloads", () => {
@@ -52,7 +52,7 @@ describe("recordUsage", () => {
     const map: UsageMap = new Map();
     recordUsage(map, "a::m", { requests: 3, tokensIn: 10, tokensOut: 4 }, T0);
     expect(fs.existsSync(file)).toBe(true);
-    expect(loadUsage(file, T0).get("a::m")).toEqual({ day: "2026-08-23", requests: 3, tokensIn: 10, tokensOut: 4 });
+    expect(loadUsage(file, T0).get("a::m")).toEqual({ day: "2026-08-23", requests: 3, tokensIn: 10, tokensOut: 4, reqTs: [T0] });
   });
 });
 

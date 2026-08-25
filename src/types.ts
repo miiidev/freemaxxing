@@ -78,6 +78,7 @@ export interface UsageRecord {
   requests: number;
   tokensIn: number;
   tokensOut: number;
+  reqTs?: number[]; // bounded arrival-time ring feeding burn-rate forecasts
 }
 
 export type UsageMap = Map<string, UsageRecord>;

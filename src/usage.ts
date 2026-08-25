@@ -3,6 +3,14 @@ import path from "node:path";
 import type { DailyCaps, UsageMap, UsageRecord } from "./types.js";
 import { nextUtcMidnight, setState, poolKey, type StateMap } from "./state.js";
 
+// Newest-wins cap keeps per-record growth bounded; rollover drops the rest.
+export const MAX_REQ_TS = 500;
+
+export function utcDayStart(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 export interface UsageDelta {
   requests?: number;
   tokensIn?: number;
@@ -55,7 +63,14 @@ export function loadUsage(file: string, now: number = Date.now()): UsageMap {
     const day = utcDayKey(now);
     for (const [id, rec] of Object.entries(raw)) {
       // stale days are dropped on sight — counters only ever describe today
-      if (isUsageRecord(rec) && rec.day === day) map.set(id, rec);
+      if (isUsageRecord(rec) && rec.day === day) {
+        if (Array.isArray(rec.reqTs)) {
+          rec.reqTs = rec.reqTs.filter((t): t is number => typeof t === "number").slice(-MAX_REQ_TS);
+        } else {
+          delete rec.reqTs;
+        }
+        map.set(id, rec);
+      }
     }
   } catch {
     // corrupt snapshot: start fresh
@@ -73,6 +88,9 @@ export function recordUsage(
   rec.requests += delta.requests ?? 0;
   rec.tokensIn += delta.tokensIn ?? 0;
   rec.tokensOut += delta.tokensOut ?? 0;
+  if ((delta.requests ?? 0) > 0) {
+    rec.reqTs = [...(rec.reqTs ?? []), now].slice(-MAX_REQ_TS);
+  }
   map.set(id, rec);
   if (usageFile) saveUsage(usageFile, map);
 }
