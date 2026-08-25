@@ -85,7 +85,15 @@ const goodFetch = (async (_url: string | URL, init?: RequestInit) => {
   return new Response("{}", { status: auth.endsWith("good") ? 200 : 401 });
 }) as unknown as typeof fetch;
 
-async function interact(script: string[], opts: Partial<Parameters<typeof runSetup>[0]> = {}) {
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+async function interact(
+  script: string[],
+  opts: Partial<Parameters<typeof runSetup>[0]> = {},
+  promptHints?: string[],
+) {
   const chunks: string[] = [];
   const input = new Readable({ read() {} });
   const output = new Writable({
@@ -102,11 +110,24 @@ async function interact(script: string[], opts: Partial<Parameters<typeof runSet
     fetchImpl: goodFetch,
     ...opts,
   }).then(resolveDone);
-  // feed lines asynchronously so prompts render between them
+  // Feed each line only after its prompt has rendered: readline discards
+  // lines that arrive before rl.question() attaches, so fixed-delay feeding
+  // races under load. Repeat prompts are synced by occurrence count.
   (async () => {
-    for (const line of script) {
-      await new Promise<void>((r) => setTimeout(r, 5));
-      input.push(`${line}\n`);
+    const fedFor = new Map<string, number>();
+    for (let i = 0; i < script.length; i++) {
+      const hint = promptHints?.[i];
+      if (hint) {
+        const need = (fedFor.get(hint) ?? 0) + 1;
+        fedFor.set(hint, need);
+        const deadline = Date.now() + 2000;
+        while (countOccurrences(chunks.join(""), hint) < need && Date.now() < deadline) {
+          await new Promise<void>((r) => setTimeout(r, 2));
+        }
+      } else {
+        await new Promise<void>((r) => setTimeout(r, 5));
+      }
+      input.push(`${script[i]}\n`);
     }
     input.push(null); // EOF — unanswered prompts must take defaults
   })();
@@ -148,21 +169,33 @@ describe("runSetup flags path", () => {
 
 describe("runSetup interactive path", () => {
   it("takes groq by default, saves the key, declines extras via EOF", async () => {
-    const { code, text, envPath } = await interact(["", "good"]);
+    const { code, text, envPath } = await interact(
+      ["", "good"],
+      {},
+      ["Provider to start with", "GROQ_API_KEY:"],
+    );
     expect(code).toBe(0);
     expect(text).toContain("console.groq.com/keys");
     expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=good");
   });
 
   it("retries invalid paste up to three attempts", async () => {
-    const { code, text, envPath } = await interact(["", "nope", "nope", "good"]);
+    const { code, text, envPath } = await interact(
+      ["", "nope", "nope", "good"],
+      {},
+      ["Provider to start with", "GROQ_API_KEY:", "GROQ_API_KEY:", "GROQ_API_KEY:"],
+    );
     expect(code).toBe(0);
     expect((text.match(/attempt \d\/3/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(fs.readFileSync(envPath, "utf8")).toContain("GROQ_API_KEY=good");
   });
 
   it("accepts a second provider when answered y", async () => {
-    const { code, envPath } = await interact(["google", "good", "y", "good"]);
+    const { code, envPath } = await interact(
+      ["google", "good", "y", "good"],
+      {},
+      ["Provider to start with", "GEMINI_API_KEY:", "Add groq too?", "GROQ_API_KEY:"],
+    );
     expect(code).toBe(0);
     const content = fs.readFileSync(envPath, "utf8");
     expect(content).toContain("GEMINI_API_KEY=good");
