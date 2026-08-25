@@ -9,8 +9,10 @@ import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
+  defaultSpendPath,
   type AppConfig, type LocalConfig, DEFAULT_LOCAL,
 } from "./config.js";
+import { loadSpend, fileSpendStore } from "./spend.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, projectExhaustion, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
@@ -100,6 +102,10 @@ export function formatLocalLine(local: LocalConfig, reachable: boolean): string 
   if (!local.enabled) return "local \u2014 not configured";
   const flavor = local.endpoint.includes(":11434") ? "ollama" : "custom";
   return `local (${flavor}) \u2014 ${local.model} \u2014 ${reachable ? "available" : "unreachable"}`;
+}
+
+export function formatHybridLine(spentUSD: number, capUSD: number): string {
+  return `hybrid: $${spentUSD.toFixed(2)} / $${capUSD.toFixed(2)} spent today`;
 }
 
 // First-run guidance: a fresh user with zero keys gets the wizard, everyone
@@ -219,6 +225,9 @@ async function printStatus(verbose = false): Promise<void> {
     console.log("");
   }
   console.log(formatLocalLine(cfg.local ?? DEFAULT_LOCAL, await probeLocal(cfg.local ?? DEFAULT_LOCAL)));
+  if (cfg.hybrid?.enabled) {
+    console.log(formatHybridLine(loadSpend(defaultSpendPath())?.spentUSD ?? 0, cfg.hybrid.dailyCapUSD));
+  }
 }
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -263,6 +272,7 @@ export async function runCli(argv: string[]): Promise<number> {
       providerCaps: mergedProviderCaps(cfg),
       reliabilityMap: loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability),
       localCfg: cfg.local,
+      spend: fileSpendStore(defaultSpendPath()),
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;

@@ -139,6 +139,8 @@ model or provider in `~/.maxout/config.json`:
 Token counts use provider-reported usage when available and an input-size
 estimate otherwise.
 
+- **Opt-in paid fallback** — set `hybrid.enabled` in `~/.maxout/config.json` with a hard `dailyCapUSD`; free and local capacity is always used first, spend is tracked locally, and the cap holds across restarts.
+
 ## Local-first & privacy
 
 Maxout is deliberately boring about your data:
