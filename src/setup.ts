@@ -99,7 +99,11 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
     return 0;
   }
 
-  const rl = readline.createInterface({ input: opts.input!, output: opts.output! });
+  // CLI invocation passes no streams — fall back to the real terminal.
+  const rl = readline.createInterface({
+    input: opts.input ?? process.stdin,
+    output: opts.output ?? process.stdout,
+  });
   // Informational text goes straight to the output stream — readline's own
   // write path is unreliable for non-TTY streams.
   const rawOut = opts.output ?? process.stdout;
