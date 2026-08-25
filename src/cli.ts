@@ -32,6 +32,7 @@ export function formatStatusRow(
   msRaw: ModelState,
   now: number,
   usage?: UsageRecord,
+  verbose = false,
 ): string {
   const ms = effective(msRaw, now);
   let state: string;
@@ -60,6 +61,7 @@ export function formatStatusRow(
     e.speed.padEnd(7),
     e.tools ? "tools" : "-",
     String(e.context).padStart(7),
+    ...(verbose ? [(e.maxOutput ? fmtCompact(e.maxOutput) : "-").padStart(5)] : []),
     state.padEnd(34),
     usageCol.padEnd(18),
     e.tags.join(","),
@@ -177,7 +179,7 @@ function exportStatsCmd(argv: string[]): number {
   return 0;
 }
 
-async function printStatus(): Promise<void> {
+async function printStatus(verbose = false): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
   const providers = activeProviders(cfg, env);
@@ -209,7 +211,7 @@ async function printStatus(): Promise<void> {
       ));
     }
     for (const entry of entries) {
-      console.log("  " + formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id)));
+      console.log("  " + formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id), verbose));
     }
     console.log("");
   }
@@ -223,7 +225,7 @@ export async function runCli(argv: string[]): Promise<number> {
     if (argv.includes("--reliability")) {
       await printReliabilityTable();
     } else {
-      await printStatus();
+      await printStatus(argv.includes("--verbose") || argv.includes("-v"));
     }
     return 0;
   }

@@ -116,6 +116,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       throw e;
     }
 
+    if (resolved.widened) {
+      console.error(`maxout: no candidate fits ~${estTokens} tokens for ${alias}; widened context filter`);
+    }
+
     let candidates = resolved.candidates;
     const aliasDef = deps.aliases[alias];
 
