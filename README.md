@@ -97,6 +97,19 @@ byte (non-streaming), or surface as a `{"freeroll_error":"malformed_tool_call"}`
 SSE frame at stream end. Every rejection is logged locally as a reason code
 (`~/.freeroll/malformed.jsonl`) — never the response content.
 
+## Reliability
+
+Freeroll tracks how each model actually behaves for you (validation results,
+truncations, latency) in a rolling local window and demotes proven-flaky
+models beneath their static tier. See the numbers:
+
+    node dist/cli.js status --reliability
+
+Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
+when asked:
+
+    node dist/cli.js export-stats --out freeroll-stats.json
+
 ## Quota harvest
 
 Freeroll tracks how much of each model's free-tier daily allowance you have spent

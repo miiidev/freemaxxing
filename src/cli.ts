@@ -1,15 +1,21 @@
 import { pathToFileURL } from "node:url";
+import fs from "node:fs";
+import path from "node:path";
 import { buildServer } from "./server.js";
 import { REGISTRY, applyModelLimits } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
+  type AppConfig,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
 import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
-import { loadReliability, bindReliabilityFile } from "./reliability.js";
+import {
+  loadReliability, bindReliabilityFile, stats, isDemoted,
+  type ReliabilityMap,
+} from "./reliability.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
 
 function fmtCompact(n: number): string {
@@ -104,6 +110,58 @@ export function reviveCmd(target: string, statePath: string): { removed: string[
   return { removed };
 }
 
+export function buildExportSnapshot(
+  cfg: AppConfig,
+  registryIds: Array<{ id: string }>,
+  map: ReliabilityMap,
+  now: number,
+): {
+  generatedAt: string;
+  window: AppConfig["reliability"];
+  models: Array<{ id: string; score: number | null; samples: number; avgLatencyMs: number | null }>;
+} {
+  // Allowlisted projection only — the export must never carry prompt/path/key data.
+  const models = registryIds
+    .map(({ id }) => ({ id, ...stats(map.get(id) ?? []) }))
+    .filter((m) => m.samples > 0)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .map(({ id, score, samples, avgLatencyMs }) => ({ id, score, samples, avgLatencyMs }));
+  return { generatedAt: new Date(now).toISOString(), window: cfg.reliability, models };
+}
+
+async function printReliabilityTable(): Promise<void> {
+  const cfg = loadConfig(defaultConfigPath());
+  const map = loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability);
+  console.log("freeroll reliability (rolling window)");
+  console.log("");
+  for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
+    const s = stats(map.get(entry.id) ?? []);
+    const demoted = isDemoted(s, cfg.reliability) ? "  <-- DEMOTED" : "";
+    const scoreCol = s.score === null ? "-" : s.score.toFixed(2);
+    const latCol = s.avgLatencyMs === null ? "-" : `${Math.round(s.avgLatencyMs)}ms`;
+    console.log(`${entry.id.padEnd(50)} score=${scoreCol}  n=${String(s.samples).padStart(4)}  avg=${latCol}${demoted}`);
+  }
+}
+
+function exportStatsCmd(argv: string[]): number {
+  const cfg = loadConfig(defaultConfigPath());
+  const map = loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability);
+  const snapshot = buildExportSnapshot(cfg, REGISTRY, map, Date.now());
+  const json = JSON.stringify(snapshot, null, 2);
+  const outIdx = argv.indexOf("--out");
+  const outPath = outIdx >= 0 ? argv[outIdx + 1] : undefined;
+  if (!outPath) {
+    process.stdout.write(json + "\n");
+    return 0;
+  }
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  const tmp = `${outPath}.tmp`;
+  fs.writeFileSync(tmp, json);
+  fs.renameSync(tmp, outPath);
+  process.stderr.write(`wrote ${outPath}\n`);
+  return 0;
+}
+
 async function printStatus(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
@@ -146,8 +204,16 @@ export async function runCli(argv: string[]): Promise<number> {
   const cmd = argv[0] ?? "serve";
 
   if (cmd === "status") {
-    await printStatus();
+    if (argv.includes("--reliability")) {
+      await printReliabilityTable();
+    } else {
+      await printStatus();
+    }
     return 0;
+  }
+
+  if (cmd === "export-stats") {
+    return exportStatsCmd(argv);
   }
 
   if (cmd === "serve") {
@@ -193,7 +259,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: freeroll [serve|status|revive]\n");
+  process.stderr.write("usage: freeroll [serve|status|export-stats|revive]\n");
   return 64;
 }
 
