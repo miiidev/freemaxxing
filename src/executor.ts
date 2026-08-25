@@ -119,6 +119,7 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
           // a broken inspector must not break serving
         }
       }
+      attempts.push({ model: entry.id, reason: "ok" });
       return { ok: true, response: first.response, servedBy: entry, attempts };
     }
     pushAttempt(attempts, entry.id, first);
@@ -145,6 +146,7 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
     await doSleep(backoffMs);
     const second = await attemptOnce(entry, provider, args.body, fetchImpl, ttfb);
     if (second.kind === "ok") {
+      attempts.push({ model: entry.id, reason: "ok" });
       return { ok: true, response: second.response, servedBy: entry, attempts };
     }
     pushAttempt(attempts, entry.id, second);

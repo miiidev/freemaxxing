@@ -48,7 +48,7 @@ describe("execute", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.servedBy.id).toBe("groq::a");
-      expect(res.attempts).toEqual([]);
+      expect(res.attempts).toEqual([{ model: "groq::a", reason: "ok" }]);
     }
     const sent = JSON.parse(String(calls[0].init.body));
     expect(sent.model).toBe("a");
@@ -80,6 +80,7 @@ describe("execute", () => {
     if (res.ok) expect(res.servedBy.id).toBe("groq::b");
     expect(res.attempts).toEqual([
       { model: "groq::a", reason: "quota 429", status: 429, detail: '{"error":{"message":"Rate limit reached on tokens per day (TPD)"}}' },
+      { model: "groq::b", reason: "ok" },
     ]);
     expect(stateMap.get("groq::a")?.state).toBe("exhausted");
     expect(loadState(file).get("groq::a")?.state).toBe("exhausted");
@@ -111,6 +112,7 @@ describe("execute", () => {
         status: 400,
         detail: '{"error":{"message":"max_tokens is too large"}}',
       },
+      { model: "groq::b", reason: "ok" },
     ]);
     expect(stateMap.has("groq::a")).toBe(false);
   });
@@ -221,7 +223,7 @@ describe("failure taxonomy", () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.servedBy.id).toBe("groq::c");
     expect(calls).toEqual(["a", "c"]); // or::b was never attempted
-    expect(res.attempts.map((a) => a.reason)).toEqual(["quota 429", "pool-exhausted"]);
+    expect(res.attempts.map((a) => a.reason)).toEqual(["quota 429", "pool-exhausted", "ok"]);
     expect(stateMap.get("pool::or")).toMatchObject({ state: "exhausted", reason: "pool" });
     expect(stateMap.get("or::a")).toMatchObject({ state: "exhausted", reason: "pool" });
   });
@@ -296,7 +298,7 @@ describe("failure taxonomy", () => {
     if (res.ok) expect(res.servedBy.id).toBe("groq::a"); // recovered in place
     expect(callsForA).toBe(2);
     expect(slept).toEqual([250]);
-    expect(res.attempts.map((x) => x.reason)).toEqual(["outage 503"]);
+    expect(res.attempts.map((x) => x.reason)).toEqual(["outage 503", "ok"]);
   });
 
   it("transient that fails twice records a transient cooldown and fails over", async () => {
@@ -380,7 +382,7 @@ describe("inspect hook (malformed output)", () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.servedBy.id).toBe("groq::b");
     expect(inspected).toBe(2);
-    expect(res.attempts.map((a) => a.reason)).toEqual(["malformed tool_calls[0]:arguments-not-json"]);
+    expect(res.attempts.map((a) => a.reason)).toEqual(["malformed tool_calls[0]:arguments-not-json", "ok"]);
   });
 
   it("does not write health state for malformed output", async () => {

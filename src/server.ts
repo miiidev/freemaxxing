@@ -6,13 +6,16 @@ import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } fr
 import { validateCompletion, type ToolSpec } from "./toolcall.js";
 import { recordMalformed } from "./malformed.js";
 import { recordOutcome, type ReliabilityMap } from "./reliability.js";
+import { appendTrace, tracesEnabled, type TraceRecord } from "./trace.js";
 import { Readable } from "node:stream";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import { localEntry, localProviderDef, probeLocal } from "./local.js";
 import { deriveSessionKey, SessionAffinity } from "./session.js";
+import { hybridEntry, isPaidEntry, extractCost } from "./hybrid.js";
 import type { ActiveProvider, AppConfig, LocalConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
 import type { StateMap } from "./state.js";
+import type { SpendStore } from "./spend.js";
 
 export interface ServerDeps {
   config: AppConfig;
@@ -26,6 +29,8 @@ export interface ServerDeps {
   reliabilityMap?: ReliabilityMap;
   localCfg?: LocalConfig;
   sessionAffinity?: SessionAffinity;
+  spend?: SpendStore;
+  liveTraceLog?: boolean;
 }
 
 function err(type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -35,6 +40,7 @@ function err(type: string, message: string, extra: Record<string, unknown> = {})
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   let reqCounter = 0;
+  const newRequestId = (): string => `r${++reqCounter}-${Math.random().toString(36).slice(2, 8)}`;
   const usageMap = deps.usageMap ?? new Map<string, UsageRecord>();
   const providerCaps = deps.providerCaps ?? {};
 
@@ -96,6 +102,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     };
 
     const estTokens = estimateTokens(body);
+    const requestId = newRequestId();
     let resolved: ReturnType<typeof resolve>;
     try {
       resolved = resolve(
@@ -156,6 +163,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           candidates = [candidates[idx], ...candidates.filter((_, i) => i !== idx)];
         }
       }
+    }
+
+    // Hybrid tier rides LAST: position-at-end means it is attempted only once
+    // every free and local candidate has failed. Cap checked BEFORE injecting.
+    const hyb = deps.config.hybrid;
+    const paidReady =
+      hyb?.enabled === true &&
+      deps.spend !== undefined &&
+      deps.spend.spentToday(Date.now()) < hyb.dailyCapUSD &&
+      providers[hyb.provider] !== undefined;
+    const paidEntry = paidReady && hyb ? hybridEntry(hyb) : undefined;
+    if (paidEntry && !candidates.some((c) => c.id === paidEntry.id)) {
+      candidates.push(paidEntry);
     }
 
     // Determine if this request needs tool validation.
@@ -228,6 +248,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     });
 
     if (!result.ok) {
+      if (tracesEnabled()) {
+        appendTrace({
+          requestId,
+          ts: started,
+          alias,
+          ...(sKey ? { sessionKey: sKey } : {}),
+          estTokens,
+          widened: resolved.widened,
+          considered: resolved.considered.map((c) => ({ ...c })),
+          pickedReason: "all-exhausted",
+          attempts: result.attempts.map((a) => ({ model: a.model, reason: a.reason })),
+        });
+      }
       return reply.code(503).send(
         err("all_models_exhausted", `No free model available for ${alias} right now.`, {
           attempts: result.attempts,
@@ -237,19 +270,55 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     }
 
     const servedId = result.servedBy.id;
+    const wasSticky = sKey ? affinity.get(sKey) : undefined;
     if (sKey) affinity.set(sKey, servedId);
     console.log(formatRequestLog(++reqCounter, alias, result.attempts, servedId, Date.now() - started));
 
-    if (body.stream !== true) {
+    const paid = paidEntry !== undefined && isPaidEntry(result.servedBy, hyb!);
+
+    if (tracesEnabled()) {
+      const pickedReason = paid
+        ? "hybrid-paid"
+        : result.servedBy.provider === "local"
+          ? "local-fallback"
+          : affinityApplied || wasSticky === servedId
+            ? "session-affinity"
+            : resolved.winnerReason;
+      const record: TraceRecord = {
+        requestId,
+        ts: started,
+        alias,
+        ...(sKey ? { sessionKey: sKey } : {}),
+        estTokens,
+        widened: resolved.widened,
+        considered: resolved.considered.map((c) => ({ ...c })),
+        picked: servedId,
+        pickedReason,
+        attempts: result.attempts.map((a) => ({ model: a.model, reason: a.reason })),
+        servedBy: servedId,
+      };
+      appendTrace(record);
+      if (deps.liveTraceLog) {
+        console.error(`trace ${requestId}: ${pickedReason} -> ${servedId}`);
+      }
+    }
+
+if (body.stream !== true) {
       const json = (await result.response.json()) as Record<string, unknown>;
       json.model = servedId;
       const u = json.usage as Record<string, unknown> | undefined;
       const num = (v: unknown) => (typeof v === "number" ? v : undefined);
-      recordServed(result.servedBy, {
-        tokensIn: num(u?.prompt_tokens) ?? num(u?.total_tokens) ?? estTokens,
-        tokensOut: num(u?.completion_tokens) ?? 0,
-      });
+      if (paid) {
+        const cost = extractCost(json, hyb!);
+        if (cost > 0 && deps.spend) deps.spend.record(cost, Date.now());
+      } else {
+        recordServed(result.servedBy, {
+          tokensIn: num(u?.prompt_tokens) ?? num(u?.total_tokens) ?? estTokens,
+          tokensOut: num(u?.completion_tokens) ?? 0,
+        });
+      }
       reply.header("x-maxout-served-by", servedId);
+      reply.header("x-maxout-request-id", requestId);
       if (deps.config.annotateResponses) {
         const choices = json.choices as Array<Record<string, unknown>> | undefined;
         const choice0 = choices?.[0];
@@ -258,7 +327,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           message.content += `\n\n---\n*maxout: ${servedId}*`;
         }
       }
-      note(servedId, true, started);
+      if (!paid) note(servedId, true, started);
       return json;
     }
 
@@ -270,6 +339,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       "cache-control": "no-cache",
       connection: "keep-alive",
       "x-maxout-served-by": servedId,
+      "x-maxout-request-id": requestId,
     });
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
@@ -320,9 +390,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }
     });
 
-    note(servedId, !upstreamDied && streamVerdictBad === undefined, started,
-      upstreamDied ? "stream-error" : streamVerdictBad !== undefined ? "malformed" : undefined);
-    recordServed(result.servedBy, capturedUsage);
+    if (paid) {
+      if (deps.spend && hyb) {
+        const cost = extractCost(
+          { usage: { prompt_tokens: capturedUsage?.tokensIn ?? 0, completion_tokens: capturedUsage?.tokensOut ?? 0 } },
+          hyb,
+        );
+        if (cost > 0) deps.spend.record(cost, Date.now());
+      }
+    } else {
+      recordServed(result.servedBy, capturedUsage);
+      note(servedId, !upstreamDied && streamVerdictBad === undefined, started,
+        upstreamDied ? "stream-error" : streamVerdictBad !== undefined ? "malformed" : undefined);
+    }
     return reply;
   });
 
