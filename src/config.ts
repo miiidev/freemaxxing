@@ -86,6 +86,9 @@ export function defaultReliabilityPath(): string {
 export function defaultSpendPath(): string {
   return path.join(os.homedir(), ".maxout", "spend.json");
 }
+export function defaultTracePath(): string {
+  return path.join(os.homedir(), ".maxout", "traces.json");
+}
 
 export function parseEnvFile(text: string): Record<string, string> {
   const out: Record<string, string> = {};
