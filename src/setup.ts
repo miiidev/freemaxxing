@@ -10,6 +10,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline/promises";
 import type { Readable, Writable } from "node:stream";
+import { mergeConfigPatch, DEFAULT_LOCAL } from "./config.js";
+import { probeLocal } from "./local.js";
 
 // Ordered by onboarding friction — groq is the recommended first key.
 // GitHub Models omitted: provider retired July 2026.
@@ -78,6 +80,7 @@ export interface SetupOptions {
   interactive: boolean;
   provider?: string;
   key?: string;
+  configPath?: string;
   input?: Readable;
   output?: Writable;
   fetchImpl?: typeof fetch;
@@ -183,6 +186,21 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
       if (wantsMore !== "y") continue;
       if (inputClosed) break;
       if (await collect(bonus)) saved++;
+    }
+
+    if (opts.configPath && !inputClosed) {
+      const wantsLocal = (await ask("Configure local fallback (Ollama)? [y/N]: ")).toLowerCase() === "y";
+      if (wantsLocal) {
+        const endpoint = (await ask(`Endpoint [${DEFAULT_LOCAL.endpoint}]: `)) || DEFAULT_LOCAL.endpoint;
+        const model = (await ask(`Model [${DEFAULT_LOCAL.model}]: `)) || DEFAULT_LOCAL.model;
+        const reachable = await probeLocal({ enabled: true, endpoint }, opts.fetchImpl);
+        mergeConfigPatch(opts.configPath, { local: { enabled: true, endpoint, model } });
+        out(
+          reachable
+            ? `saved local fallback (${model} @ ${endpoint})`
+            : `saved local fallback (${model} @ ${endpoint}) — couldn't reach it just now, saved anyway`,
+        );
+      }
     }
 
     out(
