@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
@@ -90,13 +91,19 @@ export function formatPoolLine(
   ].join("  ");
 }
 
+// First-run guidance: a fresh user with zero keys gets the wizard, everyone
+// else (or any non-interactive shell) goes straight to serving.
+export function shouldAutoSetup(providerCount: number, interactive: boolean): boolean {
+  return providerCount === 0 && interactive;
+}
+
 export function noProvidersHint(): string[] {
   return [
     "No provider API keys were found, so every request will fail.",
     "Fix by doing ONE of:",
     '  1. Set a key in this shell (session-only):   $env:GROQ_API_KEY = "gsk_..."   <- PowerShell',
     "                                               set GROQ_API_KEY=gsk_...          <- cmd.exe",
-    "  2. Persist it across sessions: create a file at ~/.freeroll/.env containing one key per line,",
+    "  2. Persist it across sessions: create a file at ~/.maxout/.env containing one key per line,",
     "     e.g.  GROQ_API_KEY=gsk_...",
     "     Recognized names: OPENROUTER_API_KEY GROQ_API_KEY GEMINI_API_KEY MISTRAL_API_KEY CEREBRAS_API_KEY",
     "Note: in PowerShell, `set NAME=value` does NOT create an environment variable - use $env:NAME = value.",
@@ -133,7 +140,7 @@ export function buildExportSnapshot(
 async function printReliabilityTable(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const map = loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability);
-  console.log("freeroll reliability (rolling window)");
+  console.log("maxout reliability (rolling window)");
   console.log("");
   for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
     const s = stats(map.get(entry.id) ?? []);
@@ -170,7 +177,7 @@ async function printStatus(): Promise<void> {
   const states = loadState(defaultStatePath());
   const usageMap = loadUsage(defaultUsagePath());
   const providerCount = Object.keys(providers).length;
-  console.log(`freeroll status - ${providerCount}/6 providers have keys`);
+  console.log(`maxout status - ${providerCount}/6 providers have keys`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);
@@ -219,8 +226,16 @@ export async function runCli(argv: string[]): Promise<number> {
 
   if (cmd === "serve") {
     const cfg = loadConfig(defaultConfigPath());
-    const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
-    const providers = activeProviders(cfg, env);
+    let env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
+    let providers = activeProviders(cfg, env);
+    const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+    if (shouldAutoSetup(Object.keys(providers).length, interactive)) {
+      console.log("no API keys found - starting first-run setup (ctrl-c to skip)");
+      await runSetup({ envPath: defaultEnvPath(), interactive: true });
+      // The wizard may have written keys to ~/.maxout/.env — pick them up.
+      env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
+      providers = activeProviders(cfg, env);
+    }
     bindStateFile(defaultStatePath()); // spec 4.6: cooldowns/exhaustion survive restarts
     bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
     bindMalformedFile(defaultMalformedPath()); // quality events survive nothing — append-only log
@@ -238,7 +253,7 @@ export async function runCli(argv: string[]): Promise<number> {
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
     console.log(
-      `freeroll serving ${providerCount}/6 providers on http://${cfg.host}:${cfg.port}/v1`,
+      `maxout serving ${providerCount}/6 providers on http://${cfg.host}:${cfg.port}/v1`,
     );
     if (providerCount === 0) {
       for (const line of noProvidersHint()) console.log(line);
@@ -267,7 +282,7 @@ export async function runCli(argv: string[]): Promise<number> {
   if (cmd === "revive") {
     const target = argv[1];
     if (!target) {
-      process.stderr.write("usage: freeroll revive <model-id | provider-name>\n");
+      process.stderr.write("usage: maxout revive <model-id | provider-name>\n");
       return 64;
     }
     const { removed } = reviveCmd(target, defaultStatePath());
@@ -276,7 +291,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: freeroll [serve|status|setup|export-stats|revive]\n");
+  process.stderr.write("usage: maxout [serve|status|setup|export-stats|revive]\n");
   return 64;
 }
 

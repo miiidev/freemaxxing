@@ -38,7 +38,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const aliasData = Object.keys(deps.aliases).map((alias) => ({
       id: alias,
       object: "model",
-      freeroll_alias: true,
+      maxout_alias: true,
     }));
     const modelData = deps.registry.map((e) => ({ id: e.id, object: "model" }));
     return { object: "list", data: [...aliasData, ...modelData] };
@@ -189,13 +189,13 @@ const candidates = resolved.candidates;
         tokensIn: num(u?.prompt_tokens) ?? num(u?.total_tokens) ?? estTokens,
         tokensOut: num(u?.completion_tokens) ?? 0,
       });
-      reply.header("x-freeroll-served-by", servedId);
+      reply.header("x-maxout-served-by", servedId);
       if (deps.config.annotateResponses) {
         const choices = json.choices as Array<Record<string, unknown>> | undefined;
         const choice0 = choices?.[0];
         const message = choice0?.message as Record<string, unknown> | undefined;
         if (choice0?.finish_reason === "stop" && typeof message?.content === "string") {
-          message.content += `\n\n---\n*freeroll: ${servedId}*`;
+          message.content += `\n\n---\n*maxout: ${servedId}*`;
         }
       }
       note(servedId, true, started);
@@ -209,7 +209,7 @@ const candidates = resolved.candidates;
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
       connection: "keep-alive",
-      "x-freeroll-served-by": servedId,
+      "x-maxout-served-by": servedId,
     });
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
@@ -247,7 +247,7 @@ const candidates = resolved.candidates;
         if (!reply.raw.writableEnded) {
           if (link === upstream) {
             upstreamDied = true;
-            reply.raw.write(`data: {"freeroll_error":"upstream_stream_failed"}\n\n`);
+            reply.raw.write(`data: {"maxout_error":"upstream_stream_failed"}\n\n`);
           }
           reply.raw.end();
         }

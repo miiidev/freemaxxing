@@ -66,13 +66,13 @@ describe("streaming", () => {
 
     expect(statusCode).toBe(200);
     expect(headers["content-type"]).toContain("text/event-stream");
-    expect(headers["x-freeroll-served-by"]).toMatch(/^groq::/);
+    expect(headers["x-maxout-served-by"]).toMatch(/^groq::/);
     expect(body).toContain('"model":"groq::');
     expect(body).not.toContain('"model":"up"');
     expect(body.trimEnd().endsWith("data: [DONE]")).toBe(true);
   });
 
-  it("emits freeroll_error frame and never mixes models when upstream dies mid-stream", async () => {
+  it("emits maxout_error frame and never mixes models when upstream dies mid-stream", async () => {
     const fetchImpl = (async () =>
       sseResponse(['data: {"model":"up","choices":[{"delta":{"content":"partial"}}]}\n\n'], 0)
     ) as unknown as typeof fetch;
@@ -86,7 +86,7 @@ describe("streaming", () => {
       messages: [{ role: "user", content: "hi" }],
     });
 
-    expect(body).toContain('"freeroll_error":"upstream_stream_failed"');
+    expect(body).toContain('"maxout_error":"upstream_stream_failed"');
     expect(body).not.toContain("data: [DONE]");
   });
 });
@@ -156,12 +156,12 @@ describe("streaming usage recording", () => {
     const rec = usageMap.get("groq::openai/gpt-oss-20b");
     expect(rec?.tokensIn).toBe(5);
     expect(rec?.tokensOut).toBe(2);
-    expect(res.body).toContain("freeroll: "); // annotation still flows through capture untouched
+    expect(res.body).toContain("maxout: "); // annotation still flows through capture untouched
   });
 });
 
 describe("streaming tool-call guard", () => {
-  it("appends freeroll_error frame and logs the event for truncated tool args", async () => {
+  it("appends maxout_error frame and logs the event for truncated tool args", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fr-str-guard-"));
     bindMalformedFile(path.join(dir, "m.jsonl"));
 
@@ -182,8 +182,8 @@ describe("streaming tool-call guard", () => {
     bindMalformedFile(null);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('"freeroll_error":"malformed_tool_call"');
-    expect(res.body.indexOf('"freeroll_error":"malformed_tool_call"'))
+    expect(res.body).toContain('"maxout_error":"malformed_tool_call"');
+    expect(res.body.indexOf('"maxout_error":"malformed_tool_call"'))
       .toBeLessThan(res.body.indexOf("data: [DONE]"));
     expect(loadMalformed(path.join(dir, "m.jsonl"))).toEqual([
       { ts: expect.any(Number), model: "groq::openai/gpt-oss-20b", reason: "tool_calls[0]:arguments-not-json" },
@@ -201,7 +201,7 @@ describe("streaming tool-call guard", () => {
       stream: true,
       messages: [{ role: "user", content: "hello" }],
     });
-    expect(res.body).not.toContain("freeroll_error");
+    expect(res.body).not.toContain("maxout_error");
     expect(res.body.trimEnd().endsWith("data: [DONE]")).toBe(true);
   });
 });

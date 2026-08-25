@@ -120,7 +120,7 @@ describe("config reliability block", () => {
     expect(cfg.reliability).toEqual(DEFAULT_RELIABILITY);
   });
 
-  it("defaultReliabilityPath lands in ~/.freeroll", () => {
-    expect(defaultReliabilityPath().replace(/\\/g, "/")).toMatch(/\.freeroll\/reliability\.json$/);
+  it("defaultReliabilityPath lands in ~/.maxout", () => {
+    expect(defaultReliabilityPath().replace(/\\/g, "/")).toMatch(/\.maxout\/reliability\.json$/);
   });
 });

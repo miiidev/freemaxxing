@@ -1,14 +1,17 @@
 {
-  "name": "freeroll",
+  "name": "maxout",
   "version": "0.1.0",
   "description": "No entry fee, real winnings - every free AI model, one endpoint.",
   "type": "module",
   "engines": { "node": ">=20" },
-  "bin": { "freeroll": "./dist/cli.js" },
+  "bin": { "maxout": "./dist/cli.js" },
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "start": "npm run build && node dist/cli.js serve"
+    "start": "npm run build && node dist/cli.js serve",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
     "fastify": "^5.2.0"

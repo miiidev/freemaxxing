@@ -32,22 +32,22 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
 };
 
 export function defaultConfigPath(): string {
-  return path.join(os.homedir(), ".freeroll", "config.json");
+  return path.join(os.homedir(), ".maxout", "config.json");
 }
 export function defaultStatePath(): string {
-  return path.join(os.homedir(), ".freeroll", "state.json");
+  return path.join(os.homedir(), ".maxout", "state.json");
 }
 export function defaultEnvPath(): string {
-  return path.join(os.homedir(), ".freeroll", ".env");
+  return path.join(os.homedir(), ".maxout", ".env");
 }
 export function defaultUsagePath(): string {
-  return path.join(os.homedir(), ".freeroll", "usage.json");
+  return path.join(os.homedir(), ".maxout", "usage.json");
 }
 export function defaultMalformedPath(): string {
-  return path.join(os.homedir(), ".freeroll", "malformed.jsonl");
+  return path.join(os.homedir(), ".maxout", "malformed.jsonl");
 }
 export function defaultReliabilityPath(): string {
-  return path.join(os.homedir(), ".freeroll", "reliability.json");
+  return path.join(os.homedir(), ".maxout", "reliability.json");
 }
 
 export function parseEnvFile(text: string): Record<string, string> {

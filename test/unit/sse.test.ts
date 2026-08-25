@@ -61,10 +61,10 @@ describe("sseAnnotator", () => {
     ann.end(DONE);
     const out = await promise;
     expect(out).toContain('"finish_reason":null');
-    expect(out).toContain(`"content":"\\n\\n---\\n*freeroll: groq::final*"`);
+    expect(out).toContain(`"content":"\\n\\n---\\n*maxout: groq::final*"`);
     expect(out).toContain(DONE);
     // annotation frame appears between content and DONE
-    const lastAnnotation = out.lastIndexOf("freeroll:");
+    const lastAnnotation = out.lastIndexOf("maxout:");
     const donePos = out.indexOf(DONE);
     expect(lastAnnotation).toBeLessThan(donePos);
   });
@@ -76,7 +76,7 @@ describe("sseAnnotator", () => {
     ann.write(makeData("", "tool_calls"));
     ann.end(DONE);
     const out = await promise;
-    expect(out).not.toContain("freeroll:");
+    expect(out).not.toContain("maxout:");
     expect(out).toContain(DONE);
   });
 
@@ -87,7 +87,7 @@ describe("sseAnnotator", () => {
     ann.write(makeData(" world", null));
     ann.end(DONE);
     const out = await promise;
-    expect(out).not.toContain("freeroll:");
+    expect(out).not.toContain("maxout:");
     expect(out).toContain('"content":"hello"');
     expect(out).toContain('"content":" world"');
     expect(out).toContain(DONE);
@@ -98,7 +98,7 @@ describe("sseAnnotator", () => {
     const promise = collect(ann);
     ann.end(DONE);
     const out = await promise;
-    expect(out).not.toContain("freeroll:");
+    expect(out).not.toContain("maxout:");
     expect(out).toBe(DONE);
   });
 });

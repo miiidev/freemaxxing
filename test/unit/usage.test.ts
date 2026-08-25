@@ -15,7 +15,7 @@ const NEXT_DAY = Date.UTC(2026, 7, 24, 0, 0, 1);
 
 let dir: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "freeroll-usage-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "maxout-usage-"));
   bindUsageFile(null);
 });
 

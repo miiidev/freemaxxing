@@ -1,15 +1,15 @@
 # Manual smoke checklist (run before calling any release done)
 
-Prereq: valid keys for all six providers exported in the shell or ~/.freeroll/.env.
+Prereq: valid keys for all six providers exported in the shell or ~/.maxout/.env.
 
 1. `npm run build && node dist/cli.js serve`
-   - Expect banner: `freeroll serving 6/6 providers on http://127.0.0.1:8787/v1`
+   - Expect banner: `maxout serving 6/6 providers on http://127.0.0.1:8787/v1`
 2. `node dist/cli.js status`
    - Expect one row per registry entry for keyed providers; all `ok`.
 3. Non-streaming happy path:
    curl http://127.0.0.1:8787/v1/chat/completions -H "content-type: application/json" ^
      -d "{\"model\":\"auto/coding\",\"messages\":[{\"role\":\"user\",\"content\":\"say hi in 3 words\"}]}"
-   - Expect 200 JSON, `model` starts with `<provider>::`, header `x-freeroll-served-by` present.
+   - Expect 200 JSON, `model` starts with `<provider>::`, header `x-maxout-served-by` present.
 4. Streaming happy path: same body + `"stream":true`
    - Expect SSE frames, each frame's `model` field rewritten to served id, final `data: [DONE]`.
 5. Failover drill: exhaust one provider deliberately (tiny daily-limit provider first),
@@ -22,10 +22,10 @@ Prereq: valid keys for all six providers exported in the shell or ~/.freeroll/.e
 
 ## Setup wizard — zero-key-user acceptance
 
-1. Temporarily hide any real keys: `$env:GROQ_API_KEY=$null` etc.; ensure `%USERPROFILE%\.freeroll\.env` does not exist.
+1. Temporarily hide any real keys: `$env:GROQ_API_KEY=$null` etc.; ensure `%USERPROFILE%\.maxout\.env` does not exist.
 2. `node dist/cli.js setup` — accept the Groq recommendation (Enter).
 3. Browser opens console.groq.com/keys (or copy the printed URL); create a key; paste it.
 4. Expect `saved GROQ_API_KEY`; answer `N` to all bonus providers.
 5. `node dist/cli.js serve` → POST a tools request to `http://127.0.0.1:8787/v1/chat/completions` with `model:"auto/coding"`.
-6. Expect HTTP 200, `x-freeroll-served-by` starting `groq::`.
+6. Expect HTTP 200, `x-maxout-served-by` starting `groq::`.
 7. `node dist/cli.js status` shows `1/6 providers have keys` and groq rows only.

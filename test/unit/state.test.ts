@@ -55,7 +55,7 @@ describe("persistence", () => {
   beforeEach(() => bindStateFile(null));
 
   function tmpfile(): string {
-    return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "freeroll-test-")), "state.json");
+    return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "maxout-test-")), "state.json");
   }
 
   it("roundtrips through disk, dropping expired entries", () => {

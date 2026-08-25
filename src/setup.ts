@@ -134,7 +134,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
 
   try {
     out(
-      "freeroll setup",
+      "maxout setup",
       "",
       "One free provider is enough to start. Recommended: Groq (fast signup, generous free tier).",
       "Providers:",
@@ -189,7 +189,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
       "",
       saved > 0
         ? `Done — ${saved} provider key(s) in ${opts.envPath}. Start with: node dist/cli.js serve`
-        : "No keys saved. Re-run freeroll setup whenever you're ready.",
+        : "No keys saved. Re-run maxout setup whenever you're ready.",
     );
     return saved > 0 ? 0 : 1;
   } finally {
