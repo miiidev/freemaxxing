@@ -6,6 +6,14 @@ import { nextUtcMidnight, setState, poolKey, type StateMap } from "./state.js";
 // Newest-wins cap keeps per-record growth bounded; rollover drops the rest.
 export const MAX_REQ_TS = 500;
 
+// Below this, a "projection" would just be noise.
+export const MIN_FORECAST_SAMPLES = 5;
+const MIN_FORECAST_ELAPSED_MIN = 15;
+
+export interface Forecast {
+  projectedAt: number;
+}
+
 export function utcDayStart(now: number): number {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -166,4 +174,23 @@ export function maybeExhaustProvider(states: StateMap, provider: string, view: B
       reason: "pool",
     });
   }
+}
+
+// Linear-from-day-start by design: simple enough to verify by hand, which is
+// the point of showing a prediction to the user.
+export function projectExhaustion(
+  provider: string,
+  caps: DailyCaps | undefined,
+  map: UsageMap,
+  now: number,
+): Forecast | null {
+  if (!caps?.rpd) return null;
+  const totals = aggregateProvider(map, provider);
+  if (totals.requests < MIN_FORECAST_SAMPLES) return null;
+  const elapsedMin = (now - utcDayStart(now)) / 60_000;
+  if (elapsedMin < MIN_FORECAST_ELAPSED_MIN) return null;
+  const remaining = caps.rpd - totals.requests;
+  if (remaining <= 0) return null;
+  const ratePerMs = totals.requests / (elapsedMin * 60_000);
+  return { projectedAt: Math.round((now + remaining / ratePerMs) / 60_000) * 60_000 };
 }

@@ -12,7 +12,7 @@ import {
   type AppConfig, type LocalConfig, DEFAULT_LOCAL,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
-import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
+import { aggregateProvider, bindUsageFile, loadUsage, projectExhaustion, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
 import { runSetup, SETUP_PROVIDERS } from "./setup.js";
 import {
@@ -75,6 +75,7 @@ export function formatPoolLine(
   msRaw: ModelState,
   modelCount: number,
   now: number,
+  forecast?: { projectedAt: number } | null,
 ): string {
   const ms = effective(msRaw, now);
   let spent: string;
@@ -86,10 +87,11 @@ export function formatPoolLine(
   // UTC-midnight rollover for every pool profile, so ok pools always read 00:00.
   const resetAt = ms.state === "exhausted" ? new Date(ms.until).toISOString().slice(11, 16) : "00:00";
   const st = ms.state === "ok" || ms.state === "exhausted" ? ms.state : String(ms.state);
+  const fc = forecast ? ` · projected exhaustion ~${new Date(forecast.projectedAt).toISOString().slice(11, 16)} UTC` : "";
   return [
     `[pool] ${provider.padEnd(12)}`,
     spent.padEnd(10),
-    `${st} · resets ${resetAt} UTC`,
+    `${st} · resets ${resetAt} UTC${fc}`,
     `shared by ${modelCount} model${modelCount === 1 ? " " : "s"}`,
   ].join("  ");
 }
@@ -208,6 +210,7 @@ async function printStatus(verbose = false): Promise<void> {
       console.log(formatPoolLine(
         provider, caps, aggregateProvider(usageMap, provider),
         states.get(poolKey(provider)) ?? { state: "ok" }, entries.length, now,
+        projectExhaustion(provider, caps, usageMap, now),
       ));
     }
     for (const entry of entries) {
