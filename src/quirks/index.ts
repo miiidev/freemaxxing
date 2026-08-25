@@ -114,6 +114,12 @@ const cerebras: Quirk = {
   },
 };
 
+const local: Quirk = {
+  classifyFailure(status, body, headers, now) {
+    return base(status, body, headers, now) ?? RATE_60S;
+  },
+};
+
 export const QUIRKS: Record<string, Quirk> = {
   openrouter,
   groq,
@@ -121,4 +127,5 @@ export const QUIRKS: Record<string, Quirk> = {
   mistral,
   github,
   cerebras,
+  local,
 };
