@@ -132,6 +132,23 @@ model or provider in `~/.freeroll/config.json`:
 Token counts use provider-reported usage when available and an input-size
 estimate otherwise.
 
+## Local-first & privacy
+
+Freeroll is deliberately boring about your data:
+
+- Your API keys live only in your environment (or `%USERPROFILE%\.freeroll\.env`)
+  and go directly to the provider you called. Freeroll has no telemetry, no
+  phoning home, and no third party in the middle — requests leave your machine
+  straight for OpenRouter/Groq/Google/Mistral/Cerebras.
+- Prompt and response bodies are never written to disk. What IS stored locally
+  under `%USERPROFILE%\.freeroll\`: daily spend counters (`usage.json`), model
+  health states (`state.json`), quality outcomes as numbers (`reliability.json`),
+  rejection reason codes (`malformed.jsonl`), and console lines naming which
+  model answered.
+- `freeroll export-stats` is the ONLY feature that produces shareable data. It
+  runs solely when you invoke it and emits an allowlisted, anonymized summary
+  (see above). Nothing is sent anywhere unless you send it.
+
 ## Development
 
     npm test          # vitest, fully offline (upstreams mocked)
