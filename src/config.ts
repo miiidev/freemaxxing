@@ -20,6 +20,24 @@ export const DEFAULT_LOCAL: LocalConfig = {
   contextWindow: 32768,
 };
 
+export interface HybridConfig {
+  enabled: boolean;
+  dailyCapUSD: number;
+  provider: string;
+  model: string;
+  priceInPerMTok: number;
+  priceOutPerMTok: number;
+}
+
+export const DEFAULT_HYBRID: HybridConfig = {
+  enabled: false,
+  dailyCapUSD: 2,
+  provider: "openrouter",
+  model: "deepseek/deepseek-chat-v3.1",
+  priceInPerMTok: 0.27,
+  priceOutPerMTok: 1.1,
+};
+
 export interface AppConfig {
   port: number;
   host: string;
@@ -31,6 +49,7 @@ export interface AppConfig {
   providerLimits: Record<string, Partial<DailyCaps>>;
   reliability: ReliabilityConfig;
   local?: LocalConfig;
+  hybrid?: HybridConfig;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -63,6 +82,9 @@ export function defaultMalformedPath(): string {
 }
 export function defaultReliabilityPath(): string {
   return path.join(os.homedir(), ".maxout", "reliability.json");
+}
+export function defaultSpendPath(): string {
+  return path.join(os.homedir(), ".maxout", "spend.json");
 }
 
 export function parseEnvFile(text: string): Record<string, string> {
@@ -102,6 +124,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     providerLimits: {},
     reliability: { ...DEFAULT_RELIABILITY },
     local: { ...DEFAULT_LOCAL },
+    hybrid: { ...DEFAULT_HYBRID },
     providers: Object.fromEntries(
       Object.entries(DEFAULT_ENV_KEYS).map(([name, envKey]) => [name, { apiKeyEnv: envKey }]),
     ),
@@ -135,6 +158,15 @@ export function loadConfig(configPath: string | null): AppConfig {
       if (typeof l.contextWindow === "number" && l.contextWindow > 0) {
         local.contextWindow = Math.floor(l.contextWindow);
       }
+    }
+    if (raw.hybrid && typeof raw.hybrid === "object") {
+      const h = raw.hybrid as Partial<HybridConfig>;
+      if (typeof h.enabled === "boolean") cfg.hybrid!.enabled = h.enabled;
+      if (typeof h.dailyCapUSD === "number" && h.dailyCapUSD > 0) cfg.hybrid!.dailyCapUSD = h.dailyCapUSD;
+      if (typeof h.provider === "string" && h.provider.length > 0) cfg.hybrid!.provider = h.provider;
+      if (typeof h.model === "string" && h.model.length > 0) cfg.hybrid!.model = h.model;
+      if (typeof h.priceInPerMTok === "number" && h.priceInPerMTok >= 0) cfg.hybrid!.priceInPerMTok = h.priceInPerMTok;
+      if (typeof h.priceOutPerMTok === "number" && h.priceOutPerMTok >= 0) cfg.hybrid!.priceOutPerMTok = h.priceOutPerMTok;
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
