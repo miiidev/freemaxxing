@@ -48,6 +48,7 @@ function isRegistryEntry(v: unknown): v is RegistryEntry {
     return false;
   }
   if (typeof e.context !== "number" || !(e.context > 0)) return false;
+  if (e.maxOutput !== undefined && (typeof e.maxOutput !== "number" || !(e.maxOutput > 0))) return false;
   return typeof e.tools === "boolean";
 }
 

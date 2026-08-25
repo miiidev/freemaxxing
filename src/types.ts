@@ -30,6 +30,7 @@ export interface RegistryEntry {
   tier: number;
   speed: Speed;
   context: number;
+  maxOutput?: number;
   tools: boolean;
   limits?: DailyCaps;
 }
