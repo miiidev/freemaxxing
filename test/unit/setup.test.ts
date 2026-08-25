@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SETUP_PROVIDERS, buildEnvContent } from "../../src/setup.js";
+import { SETUP_PROVIDERS, buildEnvContent, validateKey } from "../../src/setup.js";
 
 describe("SETUP_PROVIDERS", () => {
   it("recommends groq first", () => {
@@ -39,5 +39,36 @@ describe("buildEnvContent", () => {
     const out = buildEnvContent(existing, { GROQ_API_KEY: "c" });
     expect(out.match(/GROQ_API_KEY=/g)).toHaveLength(1);
     expect(out).toContain("GROQ_API_KEY=c");
+  });
+});
+
+describe("validateKey", () => {
+  it("passes on 2xx and hits the models endpoint with the bearer key", async () => {
+    const calls: Array<{ url: string; auth?: unknown }> = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), auth: (init?.headers as Record<string, unknown>)?.authorization });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    const res = await validateKey("https://x.test/v1/", "sk_abc", fetchImpl);
+    expect(res).toEqual({ ok: true });
+    expect(calls[0].url).toBe("https://x.test/v1/models");
+    expect(calls[0].auth).toBe("Bearer sk_abc");
+  });
+
+  it("rejects 401/403 as invalid key", async () => {
+    for (const status of [401, 403]) {
+      const fetchImpl = (async () => new Response("{}", { status })) as unknown as typeof fetch;
+      const res = await validateKey("https://x.test/v1", "bad", fetchImpl);
+      expect(res).toEqual({ ok: false, detail: "invalid key" });
+    }
+  });
+
+  it("reports unexpected statuses and transport errors", async () => {
+    const fetch500 = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
+    expect(await validateKey("https://x.test/v1", "k", fetch500))
+      .toEqual({ ok: false, detail: "HTTP 500" });
+    const fetchBoom = (async () => { throw new Error("dns fail"); }) as unknown as typeof fetch;
+    expect(await validateKey("https://x.test/v1", "k", fetchBoom))
+      .toEqual({ ok: false, detail: "dns fail" });
   });
 });

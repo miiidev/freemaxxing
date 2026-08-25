@@ -31,3 +31,30 @@ export function buildEnvContent(
   for (const [k, v] of Object.entries(updates)) kept.push(`${k}=${v}`);
   return `${kept.sort().join("\n")}\n`;
 }
+
+function joinURL(base: string, pathPart: string): string {
+  return base.replace(/\/+$/, "") + pathPart;
+}
+
+export interface KeyValidation {
+  ok: boolean;
+  detail?: string;
+}
+
+// Lightweight liveness/auth probe — GET /models is free on every provider.
+export async function validateKey(
+  baseURL: string,
+  key: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<KeyValidation> {
+  try {
+    const res = await fetchImpl(joinURL(baseURL, "/models"), {
+      headers: { authorization: `Bearer ${key}` },
+    });
+    if (res.ok) return { ok: true };
+    if (res.status === 401 || res.status === 403) return { ok: false, detail: "invalid key" };
+    return { ok: false, detail: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+}
