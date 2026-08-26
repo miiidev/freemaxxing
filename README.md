@@ -1,6 +1,14 @@
 # Maxout
 
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Maxout logo" width="180" />
+</p>
+
 *No entry fee, real winnings — every free AI model, one endpoint.*
+
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Maxout banner" width="100%" />
+</p>
 
 Maxout is a local OpenAI-compatible proxy that pools curated **free-tier AI
 models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras)
@@ -21,13 +29,21 @@ key with a live call, and stores it in `%USERPROFILE%\.maxout\.env`. When at
 least one key is saved the server starts immediately; adding more providers
 later is optional bonus capacity.
 
+### Installed usage (recommended)
+
+    npm install -g .          # or: npm link  (dev)
+    maxout serve              # start server
+    maxout status             # show quota
+    maxout setup              # re-run wizard
+    maxout trace <id>         # debug routing
+
 No clone? The package is npx-ready:
 
     npx github:<owner>/maxout
 
 Scripted equivalent (CI, dotfiles):
 
-    npx . setup --provider groq --key gsk_...
+    maxout setup --provider groq --key gsk_...
 
 Then point any OpenAI-compatible tool at the server:
 
@@ -66,7 +82,7 @@ settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" bel
 
 ## Status
 
-    npx . status
+    maxout status
 
 Shows every model with its current limit state (`ok`, `cooldown Xm`,
 `exhausted until <UTC reset>`).
@@ -113,12 +129,12 @@ Maxout tracks how each model actually behaves for you (validation results,
 truncations, latency) in a rolling local window and demotes proven-flaky
 models beneath their static tier. See the numbers:
 
-    npx . status --reliability
+    maxout status --reliability
 
 Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
 when asked:
 
-    npx . export-stats --out maxout-stats.json
+    maxout export-stats --out maxout-stats.json
 
 ## Quota harvest
 
