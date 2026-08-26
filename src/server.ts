@@ -172,17 +172,24 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       }
     }
 
-    // Hybrid tier rides LAST: position-at-end means it is attempted only once
-    // every free and local candidate has failed. Cap checked BEFORE injecting.
-    const hyb = deps.config.hybrid;
-    const paidReady =
-      hyb?.enabled === true &&
-      deps.spend !== undefined &&
-      deps.spend.spentToday(Date.now()) < hyb.dailyCapUSD &&
-      providers[hyb.provider] !== undefined;
-    const paidEntry = paidReady && hyb ? hybridEntry(hyb) : undefined;
-    if (paidEntry && !candidates.some((c) => c.id === paidEntry.id)) {
-      candidates.push(paidEntry);
+    // Hybrid tier rides LAST: only injected when all free/local candidates are exhausted.
+    // Position-at-end means it is attempted only once every free and local candidate has failed.
+    let hyb: typeof deps.config.hybrid;
+    let paidEntry: RegistryEntry | undefined;
+    if (candidates.length === 0) {
+      hyb = deps.config.hybrid;
+      if (
+        hyb?.enabled === true &&
+        deps.spend !== undefined &&
+        deps.spend.spentToday(Date.now()) < hyb.dailyCapUSD &&
+        providers[hyb.provider] !== undefined
+      ) {
+        const entry = hybridEntry(hyb);
+        if (!candidates.some((c) => c.id === entry.id)) {
+          candidates.push(entry);
+          paidEntry = entry;
+        }
+      }
     }
 
     // Determine if this request needs tool validation.

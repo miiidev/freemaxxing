@@ -97,7 +97,7 @@ export function resolve(
 
   // Provider totals are derived lazily per provider to avoid rescanning per candidate.
   // computeProviderTotals is a pure function; getProviderTotals memoizes results.
-  const providerTotalsCache = new Map<string, Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null>();
+  const providerTotalsCache = new Map<string, Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | undefined>();
   function computeProviderTotals(provider: string): Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> {
     const totals = { requests: 0, tokensIn: 0, tokensOut: 0 };
     for (const other of registry) {
@@ -110,16 +110,16 @@ export function resolve(
     }
     return totals;
   }
-  function getProviderTotals(provider: string): Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null {
+  function getProviderTotals(provider: string): Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | undefined {
     if (!providerTotalsCache.has(provider)) {
       const caps = ctx.getProviderCaps?.(provider);
       if (!caps) {
-        providerTotalsCache.set(provider, null);
-        return null;
+        providerTotalsCache.set(provider, undefined);
+        return undefined;
       }
       providerTotalsCache.set(provider, computeProviderTotals(provider));
     }
-    return providerTotalsCache.get(provider) ?? null;
+    return providerTotalsCache.get(provider);
   }
 
   const provCapsOf = (e: RegistryEntry): DailyCaps | undefined => {
