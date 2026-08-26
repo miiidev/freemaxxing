@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { resolve, estimateTokens, UnknownAliasError, aliasCandidates } from "./router.js";
+import { resolve, estimateTokens, UnknownAliasError, aliasCandidates, OUTPUT_RESERVE_DEFAULT } from "./router.js";
 import { execute } from "./executor.js";
 import { formatRequestLog } from "./log.js";
 import { aggregateProvider, maybeExhaust, maybeExhaustProvider, recordUsage } from "./usage.js";
@@ -134,12 +134,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     let candidates = resolved.candidates;
     const aliasDef = deps.aliases[alias];
 
-    // Local tier gate: only after EVERY tag/tools-eligible cloud model is in
+    // Local tier gate: only after EVERY tag/tools/context-eligible cloud model is in
     // a non-OK state — never preferred over available cloud capacity.
     if (candidates.length === 0 && deps.localCfg?.enabled && aliasDef) {
       const lc = deps.localCfg;
       const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
-      const eligible = aliasCandidates(aliasDef, deps.registry, hasTools);
+      const tagOk = (e: RegistryEntry) =>
+        !aliasDef.tags?.length || (aliasDef.tags as string[]).some((t) => e.tags.includes(t));
+      const needsTools = aliasDef.requireTools === true || hasTools;
+      const outReserve = (e: RegistryEntry) => e.maxOutput ?? OUTPUT_RESERVE_DEFAULT;
+      const contextOk = (e: RegistryEntry) =>
+        (aliasDef.minContext === undefined || e.context >= aliasDef.minContext) &&
+        estTokens + outReserve(e) <= e.context;
+      const eligible = deps.registry.filter(tagOk).filter((e) => (needsTools ? e.tools : true)).filter(contextOk);
       const blocked = (e: RegistryEntry) =>
         liveState(e.id).state !== "ok" ||
         (() => { const ps = liveProviderState(e.provider); return !!ps && ps.state !== "ok"; })();
