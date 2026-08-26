@@ -181,3 +181,7 @@ Maxout is deliberately boring about your data:
 
     npm test          # vitest, fully offline (upstreams mocked)
     npm run build     # strict TypeScript -> dist/
+
+---
+
+*This project was developed with AI assistance.*
