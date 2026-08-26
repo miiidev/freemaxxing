@@ -95,34 +95,46 @@ export function resolve(
     return undefined;
   };
 
-  // provider totals are derived lazily per provider to avoid rescanning per candidate
-  const provCache = new Map<string, Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null>();
-  const provCapsOf = (e: RegistryEntry): DailyCaps | undefined => {
-    const caps = ctx.getProviderCaps?.(e.provider);
-    if (!caps) return undefined;
-    if (!provCache.has(e.provider)) {
-      const totals = { requests: 0, tokensIn: 0, tokensOut: 0 };
-      for (const other of registry) {
-        if (other.provider !== e.provider) continue;
-        const r = ctx.getUsage?.(other.id);
-        if (!r || r.day !== utcDayKey(now)) continue;
-        totals.requests += r.requests;
-        totals.tokensIn += r.tokensIn;
-        totals.tokensOut += r.tokensOut;
-      }
-      provCache.set(e.provider, totals);
+  // Provider totals are derived lazily per provider to avoid rescanning per candidate.
+  // computeProviderTotals is a pure function; getProviderTotals memoizes results.
+  const providerTotalsCache = new Map<string, Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null>();
+  function computeProviderTotals(provider: string): Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> {
+    const totals = { requests: 0, tokensIn: 0, tokensOut: 0 };
+    for (const other of registry) {
+      if (other.provider !== provider) continue;
+      const r = ctx.getUsage?.(other.id);
+      if (!r || r.day !== utcDayKey(now)) continue;
+      totals.requests += r.requests;
+      totals.tokensIn += r.tokensIn;
+      totals.tokensOut += r.tokensOut;
     }
-    return { ...caps };
+    return totals;
+  }
+  function getProviderTotals(provider: string): Pick<UsageRecord, "requests" | "tokensIn" | "tokensOut"> | null {
+    if (!providerTotalsCache.has(provider)) {
+      const caps = ctx.getProviderCaps?.(provider);
+      if (!caps) {
+        providerTotalsCache.set(provider, null);
+        return null;
+      }
+      providerTotalsCache.set(provider, computeProviderTotals(provider));
+    }
+    return providerTotalsCache.get(provider) ?? null;
+  }
+
+  const provCapsOf = (e: RegistryEntry): DailyCaps | undefined => {
+    return ctx.getProviderCaps?.(e.provider);
   };
 
   const budgetOk = (e: RegistryEntry) => {
     if (!harvest) return true;
     const caps = provCapsOf(e);
+    const provTotals = caps ? getProviderTotals(e.provider) : undefined;
     return fitsBudget(
       {
         rec: ctx.getUsage?.(e.id),
         modelCaps: e.limits,
-        provTotals: caps ? (provCache.get(e.provider) ?? undefined) : undefined,
+        provTotals,
         provCaps: caps,
       },
       ctx.estTokens,
@@ -184,13 +196,12 @@ export function resolve(
   const headroom = (e: RegistryEntry) => {
     if (!harvest) return 0;
     const hasCaps = Boolean(e.limits || ctx.getProviderCaps?.(e.provider));
-    // provCapsOf must run BEFORE reading provCache — it populates the cache.
-    if (hasCaps) provCapsOf(e);
+    const provTotals = hasCaps ? getProviderTotals(e.provider) : undefined;
     return usedFraction(
       {
         rec: ctx.getUsage?.(e.id),
         modelCaps: e.limits,
-        provTotals: hasCaps ? (provCache.get(e.provider) ?? undefined) : undefined,
+        provTotals,
         provCaps: ctx.getProviderCaps?.(e.provider),
       },
       now,
