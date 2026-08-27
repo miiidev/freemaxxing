@@ -160,3 +160,113 @@ Maxout is deliberately boring about your data:
 
     npm test          # vitest, fully offline (upstreams mocked)
     npm run build     # strict TypeScript -> dist/
+
+## Integration with AI Coding Assistants
+
+Maxout can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate maxout with popular AI coding assistants:
+
+### opencode
+
+Setup maxout as an OpenAI-compatible provider for opencode:
+
+```bash
+# From maxout project directory
+cd maxout
+npm start          # Start maxout server on http://127.0.0.1:8787/v1
+```
+
+In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`), add the provider:
+
+```json
+{
+  "provider": {
+    "maxout": {
+      "name": "Maxout",
+      "api": "openai",
+      "options": {
+        "baseURL": "http://127.0.0.1:8787/v1",
+        "apiKey": "sk-noop"
+      },
+      "models": {
+        "auto/coding": { "name": "Maxout: best free coding model", "tool_call": true },
+        "auto/fast": { "name": "Maxout: fastest free model", "tool_call": true },
+        "auto/any": { "name": "Maxout: any free model", "tool_call": true }
+      }
+    }
+  },
+  "model": "maxout/auto/coding"
+}
+```
+
+**Notes:**
+- maxout doesn't require client API keys (use a dummy key)
+- `auto/coding` is optimized for coding tasks with tool support
+- `auto/fast` prioritizes speed over intelligence
+- `auto/any` includes all available free models
+
+### Other OpenAI-Compatible Tools
+
+Any tool that speaks OpenAI's API can use maxout by pointing it to the local proxy:
+
+#### General Configuration
+
+    base URL: http://127.0.0.1:8787/v1
+    API key: anything (maxout does not check client keys)
+    model: auto/coding | auto/fast | auto/any
+
+#### Examples
+
+**Cursor**
+```json
+{
+  "name": "Maxout Proxy",
+  "endpoint": "http://127.0.0.1:8787/v1",
+  "apiKey": "dummy-key-for-maxout",
+  "model": "maxout/auto/coding"
+}
+```
+
+**Cline**
+- Set `API_ENDPOINT` to `http://127.0.0.1:8787/v1`
+- Set `API_KEY` to `dummy-key-for-maxout`
+- Set `MODEL` to `maxout/auto/coding`
+
+**RooCode**
+- OpenAI-compatible endpoint: `http://127.0.0.1:8787/v1`
+- Use any model name (maxout handles aliasing internally)
+
+**Claude Code**
+- Configure to use OpenAI-compatible endpoint
+- Base URL: `http://127.0.0.1:8787/v1`
+- Model: `maxout/auto/coding`
+
+**Continue**
+- Set `openAiHost` to `http://127.0.0.1:8787/v1`
+- Any OpenAI-compatible model name works (e.g., `maxout/auto/coding`)
+
+**OpenHands**
+```yaml
+ai:
+  provider: "openai"
+  model: "maxout/auto/coding"
+  endpoint: "http://127.0.0.1:8787/v1"
+  api_key: "dummy-key-for-maxout"
+```
+
+**Any HTTP Client**
+```bash
+curl -X POST http://127.0.0.1:8787/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dummy-key-for-maxout" \
+  -d '{"model": "maxout/auto/coding", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**Troubleshooting**
+
+- Ensure maxout is running: `maxout status`
+- Check that maxout can access all required API keys: `maxout setup`
+- Use `maxout serve --trace` to see model routing in real-time
+- If no models show up in status, check your maxout configuration in `~/.maxout/config.json`
+
+**Quick Prompt for AI Agents**
+You can tell your agent: "Please install maxout globally via npm and start the server with `maxout serve`."
