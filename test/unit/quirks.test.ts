@@ -56,15 +56,6 @@ describe("mistral", () => {
   });
 });
 
-describe("github", () => {
-  const q = QUIRKS["github"];
-  it("429 with x-ratelimit-reset -> rate until reset", () => {
-    const resetEpoch = Math.floor(NOW / 1000) + 45;
-    expect(q.classifyFailure(429, {}, H({ "x-ratelimit-reset": String(resetEpoch) }), NOW))
-      .toEqual({ kind: "rate", retryAfterMs: 45_000 });
-  });
-});
-
 describe("retry-after is authoritative", () => {
   const NOW2 = Date.UTC(2026, 7, 22, 12, 0, 0);
   it("openrouter: retry-after beats free-model body", () => {

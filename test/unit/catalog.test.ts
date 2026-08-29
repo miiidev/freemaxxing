@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { PROVIDERS, REGISTRY, applyModelLimits } from "../../src/catalog.js";
 
 describe("catalogs", () => {
-  it("exposes all six providers with valid shape", () => {
-    for (const name of ["openrouter", "groq", "google", "mistral", "github", "cerebras"]) {
+  it("exposes all providers with valid shape", () => {
+    for (const name of ["openrouter", "groq", "google", "mistral", "cerebras"]) {
       const p = PROVIDERS[name];
       expect(p, `missing provider ${name}`).toBeDefined();
       expect(p.baseURL.startsWith("https://")).toBe(true);

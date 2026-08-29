@@ -96,18 +96,6 @@ const mistral: Quirk = {
   },
 };
 
-const github: Quirk = {
-  classifyFailure(status, body, headers, now) {
-    if (status === 429) {
-      const reset = Number(headers.get("x-ratelimit-reset"));
-      if (!Number.isNaN(reset) && reset > 0) {
-        return { kind: "rate", retryAfterMs: Math.max(0, reset * 1000 - now) };
-      }
-    }
-    return base(status, body, headers, now) ?? RATE_60S;
-  },
-};
-
 const cerebras: Quirk = {
   classifyFailure(status, body, headers, now) {
     return base(status, body, headers, now) ?? RATE_60S;
@@ -119,6 +107,5 @@ export const QUIRKS: Record<string, Quirk> = {
   groq,
   google,
   mistral,
-  github,
   cerebras,
 };
