@@ -16,6 +16,8 @@ export interface AppConfig {
   modelLimits: Record<string, Partial<DailyCaps>>;
   providerLimits: Record<string, Partial<DailyCaps>>;
   reliability: ReliabilityConfig;
+  ttfbTimeoutMs?: number;
+  retryBackoffMs?: number;
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -111,6 +113,8 @@ export function loadConfig(configPath: string | null): AppConfig {
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
+    if (typeof raw.ttfbTimeoutMs === "number" && raw.ttfbTimeoutMs > 0) cfg.ttfbTimeoutMs = raw.ttfbTimeoutMs;
+    if (typeof raw.retryBackoffMs === "number" && raw.retryBackoffMs > 0) cfg.retryBackoffMs = raw.retryBackoffMs;
   }
   return cfg;
 }

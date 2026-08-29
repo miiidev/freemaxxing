@@ -159,6 +159,8 @@ const candidates = resolved.candidates;
       body,
       stateMap: deps.stateMap,
       fetchImpl: deps.fetchImpl,
+      ttfbTimeoutMs: deps.config.ttfbTimeoutMs,
+      retryBackoffMs: deps.config.retryBackoffMs,
       inspect: needsTools
         ? async (_entry, upstreamResponse) => {
             const parsed = (await upstreamResponse.json()) as Record<string, unknown>;
