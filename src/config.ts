@@ -10,7 +10,7 @@ export interface AppConfig {
   port: number;
   host: string;
   aliases: Record<string, AliasDef>;
-  providers: Record<string, { apiKeyEnv: string }>;
+  providers: Record<string, { apiKeyEnv: string; enabled?: boolean }>;
   annotateResponses: boolean;
   harvest: boolean;
   modelLimits: Record<string, Partial<DailyCaps>>;

@@ -20,6 +20,7 @@ export interface ProviderDef {
   quirks: string;
   resetProfile: ResetProfile;
   limits?: DailyCaps;
+  enabled?: boolean;
 }
 
 export interface RegistryEntry {
