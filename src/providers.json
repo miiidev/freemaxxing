@@ -1,42 +1,54 @@
 {
-  "openrouter": {
+"openrouter": {
     "baseURL": "https://openrouter.ai/api/v1",
     "auth": "bearer",
     "quirks": "openrouter",
     "resetProfile": { "kind": "daily-utc-midnight" },
-    "limits": { "rpd": 50 }
+    "limits": { "rpd": 50 },
+    "enabled": true
   },
-  "groq": {
+"groq": {
     "baseURL": "https://api.groq.com/openai/v1",
     "auth": "bearer",
     "quirks": "groq",
     "resetProfile": { "kind": "daily-utc-midnight" },
-    "limits": { "rpd": 1000 }
+    "limits": { "rpd": 1000 },
+    "enabled": true
   },
-  "google": {
+"google": {
     "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "auth": "bearer",
     "quirks": "google",
-    "resetProfile": { "kind": "daily-utc-midnight" }
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "enabled": true
   },
-  "mistral": {
+"mistral": {
     "baseURL": "https://api.mistral.ai/v1",
     "auth": "bearer",
     "quirks": "mistral",
-    "resetProfile": { "kind": "daily-utc-midnight" }
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "enabled": true
   },
-  "cerebras": {
+"cerebras": {
     "baseURL": "https://api.cerebras.ai/v1",
     "auth": "bearer",
     "quirks": "cerebras",
     "resetProfile": { "kind": "daily-utc-midnight" },
-    "limits": { "tpd": 1000000 }
+    "limits": { "tpd": 1000000 },
+    "enabled": true
   },
   "local": {
     "baseURL": "http://localhost:11434",
     "auth": "none",
     "quirks": "ollama",
     "resetProfile": { "kind": "daily-utc-midnight" },
-    "limits": { "rpd": 1000000, "tpd": 1000000 }
+"limits": { "rpd": 1000000, "tpd": 1000000 },
+    "enabled": true
   }
 }
+
+
+
+
+
+
