@@ -253,8 +253,9 @@ export async function runCli(argv: string[]): Promise<number> {
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
+    const registryProviderCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
     console.log(
-      `maxout serving ${providerCount}/6 providers on http://${cfg.host}:${cfg.port}/v1`,
+      `maxout serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
     );
     if (providerCount === 0) {
       for (const line of noProvidersHint()) console.log(line);
