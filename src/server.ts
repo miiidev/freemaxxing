@@ -7,6 +7,7 @@ import { validateCompletion, type ToolSpec } from "./toolcall.js";
 import { recordMalformed } from "./malformed.js";
 import { recordOutcome, type ReliabilityMap } from "./reliability.js";
 import { Readable } from "node:stream";
+import { setState } from "./state.js";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
@@ -226,6 +227,11 @@ const candidates = resolved.candidates;
             if (!v.ok) {
               streamVerdictBad = v.reason ?? "unknown";
               recordMalformed(servedId, streamVerdictBad);
+              setState(deps.stateMap, servedId, {
+                state: "cooldown",
+                until: Date.now() + 60_000,
+                reason: "malformed",
+              });
             }
           },
         })

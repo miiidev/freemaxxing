@@ -383,7 +383,7 @@ describe("inspect hook (malformed output)", () => {
     expect(res.attempts.map((a) => a.reason)).toEqual(["malformed tool_calls[0]:arguments-not-json"]);
   });
 
-  it("does not write health state for malformed output", async () => {
+  it("writes health state for malformed output", async () => {
     const stateMap = new Map();
     const fetchImpl = (async () => jsonResponse(200, { id: "x", choices: [] })) as unknown as typeof fetch;
     await execute({
@@ -391,7 +391,8 @@ describe("inspect hook (malformed output)", () => {
       body: bodyWithTools, stateMap, fetchImpl,
       inspect: async () => "cutoff-length",
     });
-    expect(stateMap.size).toBe(0);
+    expect(stateMap.size).toBe(1);
+    expect(stateMap.get("groq::a")).toMatchObject({ state: "cooldown", reason: "malformed" });
   });
 
   it("skips inspection for streaming requests", async () => {
