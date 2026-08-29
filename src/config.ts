@@ -134,7 +134,12 @@ export function activeProviders(
 ): Record<string, ActiveProvider> {
   const out: Record<string, ActiveProvider> = {};
   for (const [name, def] of Object.entries(PROVIDERS)) {
-    const envKey = cfg.providers[name]?.apiKeyEnv ?? DEFAULT_ENV_KEYS[name];
+    // Check enabled status: config.json override first, then ProviderDef default, then true
+    const cfgProvider = cfg.providers[name];
+    const enabled = cfgProvider?.enabled ?? def.enabled ?? true;
+    if (!enabled) continue; // skip disabled providers
+
+    const envKey = cfgProvider?.apiKeyEnv ?? DEFAULT_ENV_KEYS[name];
     const apiKey = envKey ? env[envKey] : undefined;
     if (!apiKey) continue;
     out[name] = { ...def, apiKey };
