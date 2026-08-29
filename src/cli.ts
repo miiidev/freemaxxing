@@ -74,12 +74,15 @@ export function formatPoolLine(
   now: number,
 ): string {
   const ms = effective(msRaw, now);
-  let spent: string;
+  let spent = "";
   if (caps.rpd) {
     spent = `req ${totals.requests}/${fmtCompact(caps.rpd)}`;
-  } else {
-    spent = `tok ${fmtCompact(totals.tokensIn + totals.tokensOut)}/${fmtCompact(caps.tpd ?? 0)}`;
   }
+  if (caps.tpd) {
+    if (spent) spent += " · ";
+    spent += `tok ${fmtCompact(totals.tokensIn + totals.tokensOut)}/${fmtCompact(caps.tpd)}`;
+  }
+  if (!spent) spent = "req -";
   // UTC-midnight rollover for every pool profile, so ok pools always read 00:00.
   const resetAt = ms.state === "exhausted" ? new Date(ms.until).toISOString().slice(11, 16) : "00:00";
   const st = ms.state === "ok" || ms.state === "exhausted" ? ms.state : String(ms.state);
@@ -87,7 +90,7 @@ export function formatPoolLine(
     `[pool] ${provider.padEnd(12)}`,
     spent.padEnd(10),
     `${st} · resets ${resetAt} UTC`,
-    `shared by ${modelCount} model${modelCount === 1 ? " " : "s"}`,
+    `shared by ${modelCount} model${modelCount === 1 ? "" : "s"}`,
   ].join("  ");
 }
 

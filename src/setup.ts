@@ -11,6 +11,7 @@ import path from "node:path";
 import os from "node:os";
 import readline from "node:readline/promises";
 import type { Readable, Writable } from "node:stream";
+import { joinURL } from "./url.js";
 
 export interface LocalModelConfig {
   name: string;        // e.g., "qwen2.5-coder:3b"
@@ -52,10 +53,6 @@ export function buildEnvContent(
   }
   for (const [k, v] of Object.entries(updates)) kept.push(`${k}=${v}`);
   return `${kept.sort().join("\n")}\n`;
-}
-
-function joinURL(base: string, pathPart: string): string {
-  return base.replace(/\/+$/, "") + pathPart;
 }
 
 export async function listInstalledLocalModels(

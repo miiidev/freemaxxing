@@ -200,8 +200,3 @@ export function sseUsageCapture(onUsage: (u: CapturedUsage) => void): Transform 
     },
   });
 }
-
-export interface CapturedUsage {
-  tokensIn: number;
-  tokensOut: number;
-}

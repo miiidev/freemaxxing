@@ -13,6 +13,18 @@ import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord, AttemptRecord } from "./types.js";
 import type { StateMap } from "./state.js";
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function safeJsonParse(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ServerDeps {
   config: AppConfig;
   providers: Record<string, ActiveProvider>;
@@ -201,7 +213,7 @@ const candidates = resolved.candidates;
     console.log(formatRequestLog(++reqCounter, alias, result.attempts, servedId, Date.now() - started));
 
     if (body.stream !== true) {
-      const json = (await result.response.json()) as Record<string, unknown>;
+      const json = safeJsonParse(await result.response.text()) ?? {};
       json.model = servedId;
       const u = json.usage as Record<string, unknown> | undefined;
       const num = (v: unknown) => (typeof v === "number" ? v : undefined);
@@ -263,10 +275,8 @@ const candidates = resolved.candidates;
     if (tail) {
       capture.pipe(tail);
     }
-    head.pipe(capture);
-    last.pipe(reply.raw);
-    upstream.pipe(rewriter);
 
+    // Attach error handlers before data flow starts
     for (const link of [upstream, rewriter, ...(guard ? [guard] : []), capture, ...(tail ? [tail] : [])]) {
       link.on("error", () => {
         if (!reply.raw.writableEnded) {
@@ -278,6 +288,11 @@ const candidates = resolved.candidates;
         }
       });
     }
+
+    // Now establish pipes (data starts flowing)
+    head.pipe(capture);
+    last.pipe(reply.raw);
+    upstream.pipe(rewriter);
 
     await new Promise<void>((resolveDone) => {
       for (const link of [reply.raw, upstream, rewriter, ...(guard ? [guard] : []), capture, ...(tail ? [tail] : [])]) {

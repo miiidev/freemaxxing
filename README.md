@@ -1,15 +1,12 @@
+# maxout
+
+*No entry fee, real winnings — every free AI model, one endpoint.*
+
 Maxout is a local OpenAI-compatible proxy that pools curated **free-tier AI
 models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras, **and local
 LLMs via Ollama/llama.cpp**) behind stable aliases. When one model hits its rate
 limit, your request transparently fails over to the next-best free model (or
 local model if configured).
-
-*No entry fee, real winnings — every free AI model, one endpoint.*
-
-Maxout is a local OpenAI-compatible proxy that pools curated **free-tier AI
-models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras)
-behind stable aliases. When one model hits its rate limit, your request
-transparently fails over to the next-best free model.
 
 ## Quickstart
 
@@ -123,28 +120,6 @@ Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
 when asked:
 
     npx . export-stats --out maxout-stats.json
-
-## Quota harvest
-
-Maxout tracks how much of each model's free-tier daily allowance you have spent
-(today, UTC) and uses it in routing:
-
-- same-tier candidates are tried least-used first, so no single model burns out by noon;
-- models whose remaining daily budget cannot fit your request are skipped without a wasted call;
-- provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day) are respected across all their models;
-- a model that hits its cap is parked until the UTC reset, exactly like a 429 would.
-
-Spend shows up in `maxout status` (`req 12/50 · tok 84k/1M` per model, plus
-`pool 3/1000` for provider-wide pools). Caps come from
-curated seeds in `registry.json`/`providers.json`; override or extend them per
-model or provider in `~/.maxout/config.json`:
-
-    { "harvest": false,                       // revert to v0 routing entirely
-      "modelLimits":   { "google::gemini-2.5-pro": { "rpd": 100 } },
-      "providerLimits": { "openrouter": { "rpd": 1000 } } }
-
-Token counts use provider-reported usage when available and an input-size
-estimate otherwise.
 
 ## Quota harvest
 

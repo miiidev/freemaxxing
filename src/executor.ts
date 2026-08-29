@@ -5,6 +5,7 @@ import {
 } from "./state.js";
 import type { ActiveProvider } from "./config.js";
 import type { AttemptRecord, DailyCaps, Failure, RegistryEntry } from "./types.js";
+import { joinURL } from "./url.js";
 
 export interface ExecuteArgs {
   candidates: RegistryEntry[];
@@ -26,10 +27,6 @@ export type ExecuteResult =
 
 const DEFAULT_TTFB_MS = 30_000;
 const DEFAULT_RETRY_BACKOFF_MS = 200;
-
-export function joinURL(base: string, pathPart: string): string {
-  return base.replace(/\/+$/, "") + pathPart;
-}
 
 type AttemptOutcome =
   | { kind: "ok"; response: Response }
@@ -143,7 +140,7 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
     }
 
     if (first.failure.kind === "rate") {
-      recordFailure(args.stateMap, entry.id, first.failure, provider.resetProfile, Date.now());
+recordFailure(args.stateMap, entry.id, first.failure, provider.resetProfile, Date.now());
       continue;
     }
 
@@ -154,7 +151,7 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
       return { ok: true, response: second.response, servedBy: entry, attempts };
     }
     pushAttempt(attempts, entry.id, second);
-    recordFailure(args.stateMap, entry.id, first.failure, provider.resetProfile, Date.now());
+    recordFailure(args.stateMap, entry.id, second.failure, provider.resetProfile, Date.now());
   }
 
   return { ok: false, attempts };

@@ -6,10 +6,9 @@ export function formatRequestLog(
   attempts: AttemptRecord[],
   servedById: string,
   ms: number,
-  now: number = Date.now(),
 ): string {
   const tried = attempts.length
     ? ` tried=${attempts.map((a) => `${a.model}(${a.reason})`).join(",")}`
     : "";
-  return `${new Date(now).toISOString()} req=${reqNo} alias=${alias}${tried} served=${servedById} ms=${ms}`;
+  return `${new Date().toISOString()} req=${reqNo} alias=${alias}${tried} served=${servedById} ms=${ms}`;
 }
