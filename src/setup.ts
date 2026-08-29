@@ -58,7 +58,7 @@ function joinURL(base: string, pathPart: string): string {
   return base.replace(/\/+$/, "") + pathPart;
 }
 
-async function listInstalledLocalModels(
+export async function listInstalledLocalModels(
   baseURL: string,
   fetchImpl: typeof fetch,
   out: (...lines: string[]) => void

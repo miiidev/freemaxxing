@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { SETUP_PROVIDERS, buildEnvContent, validateKey, runSetup } from "../../src/setup.js";
+import { SETUP_PROVIDERS, buildEnvContent, validateKey, runSetup, listInstalledLocalModels } from "../../src/setup.js";
 
 describe("SETUP_PROVIDERS", () => {
   it("recommends groq first", () => {
@@ -169,5 +169,29 @@ describe("runSetup interactive path", () => {
     const content = fs.readFileSync(envPath, "utf8");
     expect(content).toContain("GEMINI_API_KEY=good");
     expect(content).toContain("GROQ_API_KEY=");
+  });
+});
+
+describe("local provider setup", () => {
+  it("lists installed Ollama models", async () => {
+    const fetchImpl = (async (url: string) => {
+      if ((url as string).endsWith("/api/tags")) {
+        return new Response(JSON.stringify({
+          models: [{ name: "llama3.2:latest" }, { name: "mistral:latest" }],
+        }), { status: 200 });
+      }
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+    const lines: string[] = [];
+    const installed = await listInstalledLocalModels("http://localhost:11434", fetchImpl, (...l: string[]) => void lines.push(...l));
+    expect(installed.has("llama3.2:latest")).toBe(true);
+    expect(installed.has("mistral:latest")).toBe(true);
+  });
+
+  it("handles Ollama unreachable gracefully", async () => {
+    const fetchImpl = (async () => { throw new Error("ECONNREFUSED"); }) as unknown as typeof fetch;
+    const lines: string[] = [];
+    const installed = await listInstalledLocalModels("http://localhost:11434", fetchImpl, (...l: string[]) => void lines.push(...l));
+    expect(installed.size).toBe(0);
   });
 });
