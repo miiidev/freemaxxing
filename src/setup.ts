@@ -79,7 +79,7 @@ export interface KeyValidation {
   detail?: string;
 }
 
-async function validateKey(
+export async function validateKey(
   baseURL: string,
   key: string,
   fetchImpl: typeof fetch = fetch,
