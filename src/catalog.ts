@@ -17,16 +17,18 @@ function isProviderDef(v: unknown): v is ProviderDef {
   const d = v as Record<string, unknown>;
   const reset = d.resetProfile;
   if (!validCaps(d.limits)) return false;
-  return (
+  const baseURL = d.baseURL as string | undefined;
+  const isLocal = baseURL?.startsWith("http://localhost") && d.auth === "none";
+  const isRegular =
     typeof d.baseURL === "string" &&
     d.baseURL.startsWith("https://") &&
     d.auth === "bearer" &&
     typeof d.quirks === "string" &&
-    d.quirks.length > 0 &&
+    d.quirks.length > 0;
+  return (isLocal || isRegular) &&
     typeof reset === "object" &&
     reset !== null &&
-    (reset as Record<string, unknown>).kind === "daily-utc-midnight"
-  );
+    (reset as Record<string, unknown>).kind === "daily-utc-midnight";
 }
 
 function isRegistryEntry(v: unknown): v is RegistryEntry {
