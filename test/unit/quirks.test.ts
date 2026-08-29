@@ -76,6 +76,33 @@ describe("retry-after is authoritative", () => {
   });
 });
 
+describe("ollama", () => {
+  const q = QUIRKS["ollama"];
+  const NOW = Date.UTC(2026, 7, 22, 12, 0, 0);
+
+  it("500 -> outage", () => {
+    expect(q.classifyFailure(500, {}, H({}), NOW)).toEqual({ kind: "outage" });
+  });
+
+  it("404 -> retired", () => {
+    expect(q.classifyFailure(404, {}, H({}), NOW)).toEqual({ kind: "retired" });
+  });
+
+  it("body with model not found -> retired", () => {
+    expect(q.classifyFailure(200, { error: "model 'llama3' not found" }, H({}), NOW))
+      .toEqual({ kind: "retired" });
+  });
+
+  it("body with not loaded -> 30s rate", () => {
+    expect(q.classifyFailure(200, { error: "model 'llama3' not loaded" }, H({}), NOW))
+      .toEqual({ kind: "rate", retryAfterMs: 30_000 });
+  });
+
+  it("422 -> bad_request", () => {
+    expect(q.classifyFailure(422, {}, H({}), NOW)).toEqual({ kind: "bad_request" });
+  });
+});
+
 describe("client errors are deterministic, not rate limits", () => {
   it.each(Object.keys(QUIRKS))("%s: 400 -> bad_request", (name) => {
     expect(QUIRKS[name].classifyFailure(400, {}, H({}), NOW)).toEqual({ kind: "bad_request" });

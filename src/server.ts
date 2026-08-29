@@ -41,6 +41,21 @@ function err(type: string, message: string, extra: Record<string, unknown> = {})
   return { error: { type, message, ...extra } };
 }
 
+function classifyFailures(attempts: AttemptRecord[]): string {
+  let rates = 0, malformed = 0, quotas = 0, noKeys = 0, total = attempts.length;
+  for (const a of attempts) {
+    if (a.reason.startsWith("rate")) rates++;
+    else if (a.reason.startsWith("malformed")) malformed++;
+    else if (a.reason.startsWith("quota")) quotas++;
+    else if (a.reason === "no-key") noKeys++;
+  }
+  if (malformed > total / 2) return "mostly_malformed";
+  if (rates > total / 2) return "mostly_rate_limited";
+  if (quotas > total / 2) return "mostly_budget_exhausted";
+  if (noKeys > total / 2) return "mostly_no_key";
+  return "unknown";
+}
+
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   let reqCounter = 0;
@@ -183,21 +198,6 @@ const candidates = resolved.candidates;
         : undefined,
       onMalformed,
     });
-
-    function classifyFailures(attempts: AttemptRecord[]): string {
-      let rates = 0, malformed = 0, quotas = 0, noKeys = 0, total = attempts.length;
-      for (const a of attempts) {
-        if (a.reason.startsWith("rate")) rates++;
-        else if (a.reason.startsWith("malformed")) malformed++;
-        else if (a.reason.startsWith("quota")) quotas++;
-        else if (a.reason === "no-key") noKeys++;
-      }
-      if (malformed > total / 2) return "mostly_malformed";
-      if (rates > total / 2) return "mostly_rate_limited";
-      if (quotas > total / 2) return "mostly_budget_exhausted";
-      if (noKeys > total / 2) return "mostly_no_key";
-      return "unknown";
-    }
 
     if (!result.ok) {
       return reply.code(503).send(

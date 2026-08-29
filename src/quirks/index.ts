@@ -108,10 +108,9 @@ const ollama: Quirk = {
     if (status === 404) return RETIRED;
     if (CLIENT_ERROR_STATUSES.has(status)) return BAD_REQUEST;
     if (status === 200 || status === 400) {
-      const msg = bodyStr(body).toLowerCase();
-      if (msg.includes("model not found") || msg.includes("no such model")) return RETIRED;
-      if (msg.includes("rate limit") || msg.includes("too many requests")) return RATE_60S;
-      if (msg.includes("not loaded") || msg.includes("load model")) return { kind: "rate", retryAfterMs: 30_000 };
+      if (matches(body, /model.*not found/i) || matches(body, /no such model/i)) return RETIRED;
+      if (matches(body, /rate limit|too many requests/i)) return RATE_60S;
+      if (matches(body, /not loaded|load model/i)) return { kind: "rate", retryAfterMs: 30_000 };
     }
     return base(status, body, _headers, now) ?? RATE_60S;
   },

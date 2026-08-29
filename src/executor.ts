@@ -139,8 +139,8 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
       continue;
     }
 
-    if (first.failure.kind === "rate") {
-recordFailure(args.stateMap, entry.id, first.failure, provider.resetProfile, Date.now());
+if (first.failure.kind === "rate") {
+      recordFailure(args.stateMap, entry.id, first.failure, provider.resetProfile, Date.now());
       continue;
     }
 
