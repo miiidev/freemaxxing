@@ -10,16 +10,18 @@ describe("SETUP_PROVIDERS", () => {
     expect(SETUP_PROVIDERS[0].name).toBe("groq");
   });
 
-  it("covers the five live providers and skips retired github", () => {
+  it("covers the six live providers including local", () => {
     expect(SETUP_PROVIDERS.map((p) => p.name)).toEqual([
-      "groq", "google", "openrouter", "mistral", "cerebras",
+      "groq", "google", "openrouter", "mistral", "cerebras", "local",
     ]);
   });
 
   it("uses https everywhere", () => {
     for (const p of SETUP_PROVIDERS) {
+      if (p.name === "local") continue;
       expect(p.baseURL.startsWith("https://")).toBe(true);
-      expect(p.signupUrl.startsWith("https://")).toBe(true);
+      expect(p.signupUrl).toBeDefined();
+      expect(p.signupUrl!.startsWith("https://")).toBe(true);
     }
   });
 });
