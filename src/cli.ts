@@ -3,15 +3,15 @@ import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import { buildServer } from "./server.js";
-import { REGISTRY, applyModelLimits } from "./catalog.js";
+import { REGISTRY, applyModelLimits, PROVIDERS } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
   defaultUsagePath, defaultMalformedPath, defaultReliabilityPath, mergedProviderCaps,
   type AppConfig,
+  DEFAULT_ENV_KEYS,
 } from "./config.js";
 import { loadState, effective, bindStateFile, poolKey, reviveMatching } from "./state.js";
-import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 import { bindMalformedFile } from "./malformed.js";
 import { runSetup, SETUP_PROVIDERS } from "./setup.js";
 import {
@@ -19,6 +19,7 @@ import {
   type ReliabilityMap,
 } from "./reliability.js";
 import type { DailyCaps, ModelState, RegistryEntry, UsageRecord } from "./types.js";
+import { aggregateProvider, bindUsageFile, loadUsage, type ProviderTotals } from "./usage.js";
 
 function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${Math.round(n / 100_000) / 10}M`;
@@ -293,6 +294,61 @@ export async function runCli(argv: string[]): Promise<number> {
     const { removed } = reviveCmd(target, defaultStatePath());
     if (removed.length === 0) console.log(`nothing matched '${target}'`);
     else for (const id of removed) console.log(`revived ${id}`);
+    return 0;
+  }
+
+  if (cmd === "disable") {
+    const provider = argv[1];
+    if (!provider) {
+      process.stderr.write("usage: maxout disable <provider>\n");
+      return 64;
+    }
+    const configPath = defaultConfigPath();
+    if (!fs.existsSync(configPath)) {
+      process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
+      return 64;
+    }
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<AppConfig>;
+    if (!raw.providers) raw.providers = {};
+    if (!PROVIDERS[provider]) {
+      process.stderr.write(`Unknown provider '${provider}'. Options: ${Object.keys(PROVIDERS).join(", ")}\n`);
+      return 64;
+    }
+    raw.providers[provider].enabled = false;
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2));
+    console.log(`Disabled provider '${provider}'`);
+    return 0;
+  }
+
+  if (cmd === "enable") {
+    const provider = argv[1];
+    const force = argv.includes("--force");
+    if (!provider) {
+      process.stderr.write("usage: maxout enable <provider> [--force]\n");
+      return 64;
+    }
+    const configPath = defaultConfigPath();
+    if (!fs.existsSync(configPath)) {
+      process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
+      return 64;
+    }
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<AppConfig>;
+    if (!raw.providers) raw.providers = {};
+    if (!PROVIDERS[provider]) {
+      process.stderr.write(`Unknown provider '${provider}'. Options: ${Object.keys(PROVIDERS).join(", ")}\n`);
+      return 64;
+    }
+    raw.providers[provider].enabled = true;
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2));
+    // Verify key exists when not forcing
+    if (!force) {
+      const envKey = raw.providers[provider].apiKeyEnv ?? DEFAULT_ENV_KEYS[provider];
+      if (!envKey && !process.env[envKey]) {
+        process.stderr.write(`No API key found for ${provider}. Set it first, or use --force.\n`);
+        return 64;
+      }
+    }
+    console.log(`Enabled provider '${provider}'`);
     return 0;
   }
 

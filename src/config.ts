@@ -36,6 +36,7 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   mistral: "MISTRAL_API_KEY",
   cerebras: "CEREBRAS_API_KEY",
 };
+export { DEFAULT_ENV_KEYS };
 
 export function defaultConfigPath(): string {
   return path.join(os.homedir(), ".maxout", "config.json");
