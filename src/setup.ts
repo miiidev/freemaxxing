@@ -272,16 +272,12 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
               }
             }
             config.localModels = selected;
-            // Ensure aliases include local models
             if (!config.aliases) config.aliases = {};
-            if (config.aliases.autoAny && !config.aliases.autoAny.providers.includes("local")) {
-              config.aliases.autoAny.providers.push("local");
-            }
-            if (config.aliases.autoFast && !config.aliases.autoFast.providers.includes("local")) {
-              config.aliases.autoFast.providers.push("local");
-            }
-            if (config.aliases.autoCoding && !config.aliases.autoCoding.providers.includes("local")) {
-              config.aliases.autoCoding.providers.push("local");
+            for (const aliasName of ["autoAny", "autoFast", "autoCoding"]) {
+              const alias = config.aliases[aliasName];
+              if (alias && Array.isArray(alias.providers) && !alias.providers.includes("local")) {
+                alias.providers.push("local");
+              }
             }
             await fs.writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
             out(`Saved local model config: ${selected.join(", ")}`);
