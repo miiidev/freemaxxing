@@ -31,5 +31,12 @@
     "quirks": "cerebras",
     "resetProfile": { "kind": "daily-utc-midnight" },
     "limits": { "tpd": 1000000 }
+  },
+  "local": {
+    "baseURL": "http://localhost:11434",
+    "auth": "none",
+    "quirks": "ollama",
+    "resetProfile": { "kind": "daily-utc-midnight" },
+    "limits": { "rpd": 1000000, "tpd": 1000000 }
   }
 }

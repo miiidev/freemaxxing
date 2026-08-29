@@ -1,4 +1,8 @@
-# Maxout
+Maxout is a local OpenAI-compatible proxy that pools curated **free-tier AI
+models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras, **and local
+LLMs via Ollama/llama.cpp**) behind stable aliases. When one model hits its rate
+limit, your request transparently fails over to the next-best free model (or
+local model if configured).
 
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
@@ -21,6 +25,9 @@ key with a live call, and stores it in `%USERPROFILE%\.maxout\.env`. When at
 least one key is saved the server starts immediately; adding more providers
 later is optional bonus capacity.
 
+You can also configure a **local LLM** (Ollama/llama.cpp) as a no-rate-limit
+fallback — see "Local LLM Support" below.
+
 No clone? The package is npx-ready:
 
     npx github:<owner>/maxout
@@ -38,7 +45,7 @@ Then point any OpenAI-compatible tool at the server:
 Prefer manual setup? Re-run `maxout setup` anytime, or set any subset of these
 as environment variables (a `.env` in `~/.maxout/` is loaded):
 `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
-`CEREBRAS_API_KEY`.
+`CEREBRAS_API_KEY`, `LOCAL_API_KEY`.
 
 > Warning: in PowerShell, plain `set NAME=value` does **not** create an
 > environment variable — use `$env:NAME = value`.
@@ -59,7 +66,7 @@ Define custom aliases in `~/.maxout/config.json`:
 
 Keys are read from environment variables (a `.env` in `~/.maxout/` is loaded):
 `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
-`GITHUB_TOKEN`, `CEREBRAS_API_KEY`. Providers without keys are skipped.
+`CEREBRAS_API_KEY`, `LOCAL_API_KEY`. Providers without keys are skipped.
 (`GITHUB_TOKEN` is accepted but inert: GitHub Models was retired in July 2026 — see docs/registry-notes.md.)
 Port/host are configurable in `~/.maxout/config.json`, along with quota-harvest
 settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" below).
@@ -139,7 +146,104 @@ model or provider in `~/.maxout/config.json`:
 Token counts use provider-reported usage when available and an input-size
 estimate otherwise.
 
-## Local-first & privacy
+## Quota harvest
+
+Maxout tracks how much of each model's free-tier daily allowance you have spent
+(today, UTC) and uses it in routing:
+
+- same-tier candidates are tried least-used first, so no single model burns out by noon;
+- models whose remaining daily budget cannot fit your request are skipped without a wasted call;
+- provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day) are respected across all their models;
+- a model that hits its cap is parked until the UTC reset, exactly like a 429 would.
+
+Spend shows up in `maxout status` (`req 12/50 · tok 84k/1M` per model, plus
+`pool 3/1000` for provider-wide pools). Caps come from
+curated seeds in `registry.json`/`providers.json`; override or extend them per
+model or provider in `~/.maxout/config.json`:
+
+    { "harvest": false,                       // revert to v0 routing entirely
+      "modelLimits":   { "google::gemini-2.5-pro": { "rpd": 100 } },
+      "providerLimits": { "openrouter": { "rpd": 1000 } } }
+
+Token counts use provider-reported usage when available and an input-size
+estimate otherwise.
+
+## Local LLM Support
+
+Maxout can route requests to a **local LLM** running via [Ollama](https://ollama.ai/)
+or [llama.cpp], configured to listen on `http://localhost:11434` by default.
+
+### Setup
+
+1. **Install Ollama** (or [llama.cpp](https://github.com/ggerardym/llama.cpp)) and pull a model:
+   ```bash
+   # Ollama
+   ollama pull llama3.2:latest
+   
+   # Or with llama.cpp
+   # ...start a server pointing at a .gguf model
+   ```
+
+2. **Run the maxout setup wizard** and select **local** as a provider:
+   ```bash
+   maxout setup
+   # → Select "local" from the provider list [1-6]
+   # → Skip the API key prompt (local mode)
+   # → Config saved to `~/.maxout/.env`
+   ```
+
+   Or run non-interactively:
+   ```bash
+   maxout setup --provider local --key local
+   ```
+
+3. **Verify the local provider is active**:
+   ```bash
+   maxout status
+   # → You should see `[pool] local    req 0/1000000 · ok · resets 00:00 UTC`
+   ```
+
+### Usage
+
+Use the `local::model-name` format as your model identifier:
+
+```bash
+# Via API or SDK:
+curl -X POST http://127.0.0.1:8787/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dummy-key-for-maxout" \
+  -d '{"model": "local::llama3.2:latest", "messages": [{"role": "user", "content": "Hello"}]}'
+
+# Via maxout CLI:
+maxout serve
+# Then:
+echo "Hello" | maxout chat --model local::llama3.2:latest
+```
+
+Or use aliases like `auto/any` — if the local provider is active, its models
+will appear in the candidate pool.
+
+### How It Works
+
+- The `local` provider in `providers.json` points at `http://localhost:11434` (the
+  default Ollama address)
+- Requests are forwarded to the local `/chat/completions` endpoint
+- No API key is sent to the local endpoint (maxout skips auth for local)
+- Rate limits are set to very high values (`rpd: 1M, tpd: 1M`) so local models
+  never cause "exhausted" errors
+- Local models appear in the candidate pool alongside cloud free-tier models
+- The daily pacing (P0.3) also applies: after 4hrs UTC, local models get a sort
+  penalty, so they're used as a last-resort fallback rather than primary models
+
+### Tips
+
+- **Best use case**: "If all cloud free-tier models are exhausted/cooling down,
+  finish my request with a local model instead of erroring."
+- **Not recommended as primary**: Local models don't have the same quality/consistency
+  guarantees as cloud free tiers, and they count against no rate limit — use them
+  as a fallthrough, not your everyday model.
+- To **disable** local support, just remove the `local` entry from
+  `~/.maxout/.env` and re-run `maxout serve`.
 
 Maxout is deliberately boring about your data:
 
