@@ -10,7 +10,7 @@ import { Readable } from "node:stream";
 import { setState } from "./state.js";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
-import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord } from "./types.js";
+import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord, AttemptRecord } from "./types.js";
 import type { StateMap } from "./state.js";
 
 export interface ServerDeps {
@@ -171,11 +171,27 @@ const candidates = resolved.candidates;
       onMalformed,
     });
 
+    function classifyFailures(attempts: AttemptRecord[]): string {
+      let rates = 0, malformed = 0, quotas = 0, noKeys = 0, total = attempts.length;
+      for (const a of attempts) {
+        if (a.reason.startsWith("rate")) rates++;
+        else if (a.reason.startsWith("malformed")) malformed++;
+        else if (a.reason.startsWith("quota")) quotas++;
+        else if (a.reason === "no-key") noKeys++;
+      }
+      if (malformed > total / 2) return "mostly_malformed";
+      if (rates > total / 2) return "mostly_rate_limited";
+      if (quotas > total / 2) return "mostly_budget_exhausted";
+      if (noKeys > total / 2) return "mostly_no_key";
+      return "unknown";
+    }
+
     if (!result.ok) {
       return reply.code(503).send(
         err("all_models_exhausted", `No free model available for ${alias} right now.`, {
           attempts: result.attempts,
           skippedByBudget: resolved.skippedByBudget.map((e) => e.id),
+          allExhaustedKind: classifyFailures(result.attempts),
         }),
       );
     }
