@@ -2,7 +2,7 @@ export type Speed = "fast" | "medium" | "slow";
 
 export type FailureKind = "rate" | "quota" | "outage" | "bad_request" | "retired";
 
-export type CooldownReason = "peak-throttle" | "transient";
+export type CooldownReason = "peak-throttle" | "transient" | "malformed";
 export type ExhaustReason = "pool" | "daily-cap";
 
 export interface Failure {
@@ -58,6 +58,7 @@ export interface RequestCtx {
   hasTools: boolean;
   estTokens: number;
   harvest?: boolean;
+  hasKey?: (provider: string) => boolean;
   getUsage?: (id: string) => UsageRecord | undefined;
   getProviderCaps?: (provider: string) => DailyCaps | undefined;
   getProviderState?: (provider: string) => ModelState | undefined;

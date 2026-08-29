@@ -25,7 +25,7 @@ export type ExecuteResult =
   | { ok: false; attempts: AttemptRecord[] };
 
 const DEFAULT_TTFB_MS = 30_000;
-const DEFAULT_RETRY_BACKOFF_MS = 1_000;
+const DEFAULT_RETRY_BACKOFF_MS = 200;
 
 export function joinURL(base: string, pathPart: string): string {
   return base.replace(/\/+$/, "") + pathPart;
@@ -113,6 +113,12 @@ export async function execute(args: ExecuteArgs): Promise<ExecuteResult> {
           if (reason !== undefined) {
             args.onMalformed?.(entry.id, reason);
             attempts.push({ model: entry.id, reason: `malformed ${reason}` });
+            const now = Date.now();
+            setState(args.stateMap, entry.id, {
+              state: "cooldown",
+              until: now + 60_000,
+              reason: "malformed",
+            });
             continue;
           }
         } catch {

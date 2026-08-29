@@ -27,7 +27,6 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   groq: "GROQ_API_KEY",
   google: "GEMINI_API_KEY",
   mistral: "MISTRAL_API_KEY",
-  github: "GITHUB_TOKEN",
   cerebras: "CEREBRAS_API_KEY",
 };
 

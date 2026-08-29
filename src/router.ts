@@ -40,6 +40,24 @@ export function resolve(
   getState: (id: string) => ModelState,
   ctx: RequestCtx,
 ): ResolveResult {
+  const providerModel = alias.split("::").length > 1 ? alias.split("::") : null;
+  if (providerModel) {
+    const [provider, model] = providerModel;
+    const entry = registry.find(
+      (e) => e.provider === provider && e.upstream === model,
+    );
+    if (!entry) throw new UnknownAliasError(alias);
+    const state = getState(entry.id);
+    if (state.state !== "ok") {
+      throw new UnknownAliasError(
+        `${alias} is unavailable (model is ${state.state})`,
+      );
+    }
+    return {
+      candidates: [entry],
+      skippedByBudget: [],
+    };
+  }
   const def = aliases[alias];
   if (!def) throw new UnknownAliasError(alias);
 
@@ -62,6 +80,7 @@ export function resolve(
   const stateOk = (e: RegistryEntry) => {
     if (getState(e.id).state !== "ok") return false;
     const ps = ctx.getProviderState?.(e.provider);
+    if (ctx.hasKey && !ctx.hasKey(e.provider)) return false;
     return !ps || effective(ps, now).state === "ok";
   };
 
@@ -112,6 +131,8 @@ export function resolve(
     const hasCaps = Boolean(e.limits || ctx.getProviderCaps?.(e.provider));
     // provCapsOf must run BEFORE reading provCache — it populates the cache.
     if (hasCaps) provCapsOf(e);
+    const hrs = Math.floor((now ?? Date.now()) / (1000 * 60 * 60)) % 24;
+    const pacingPenalty = e.provider === "openrouter" && hrs >= 4 ? 0.3 : 0;
     return usedFraction(
       {
         rec: ctx.getUsage?.(e.id),
@@ -120,7 +141,7 @@ export function resolve(
         provCaps: ctx.getProviderCaps?.(e.provider),
       },
       now,
-    );
+    ) + pacingPenalty;
   };
 
   const limitedKey = (e: RegistryEntry) => (e.limits ? 1 : 0);

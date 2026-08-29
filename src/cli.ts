@@ -177,7 +177,8 @@ async function printStatus(): Promise<void> {
   const states = loadState(defaultStatePath());
   const usageMap = loadUsage(defaultUsagePath());
   const providerCount = Object.keys(providers).length;
-  console.log(`maxout status - ${providerCount}/6 providers have keys`);
+  const registryProviderCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
+  console.log(`maxout status - ${providerCount}/${registryProviderCount} providers have keys`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);

@@ -25,12 +25,6 @@
     "quirks": "mistral",
     "resetProfile": { "kind": "daily-utc-midnight" }
   },
-  "github": {
-    "baseURL": "https://models.github.ai/inference",
-    "auth": "bearer",
-    "quirks": "github",
-    "resetProfile": { "kind": "daily-utc-midnight" }
-  },
   "cerebras": {
     "baseURL": "https://api.cerebras.ai/v1",
     "auth": "bearer",
