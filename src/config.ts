@@ -18,6 +18,11 @@ export interface AppConfig {
   reliability: ReliabilityConfig;
   ttfbTimeoutMs?: number;
   retryBackoffMs?: number;
+  pacing?: {
+    provider?: string;
+    thresholdHours?: number;
+    penalty?: number;
+  };
 }
 
 export interface ActiveProvider extends ProviderDef {
@@ -115,6 +120,9 @@ export function loadConfig(configPath: string | null): AppConfig {
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
     if (typeof raw.ttfbTimeoutMs === "number" && raw.ttfbTimeoutMs > 0) cfg.ttfbTimeoutMs = raw.ttfbTimeoutMs;
     if (typeof raw.retryBackoffMs === "number" && raw.retryBackoffMs > 0) cfg.retryBackoffMs = raw.retryBackoffMs;
+    if (raw.pacing && typeof raw.pacing === "object") {
+      cfg.pacing = { ...raw.pacing };
+    }
   }
   return cfg;
 }

@@ -132,7 +132,8 @@ export function resolve(
     // provCapsOf must run BEFORE reading provCache — it populates the cache.
     if (hasCaps) provCapsOf(e);
     const hrs = Math.floor((now ?? Date.now()) / (1000 * 60 * 60)) % 24;
-    const pacingPenalty = e.provider === "openrouter" && hrs >= 4 ? 0.3 : 0;
+    const pacing = ctx.pacing ?? { provider: "openrouter", thresholdHours: 4, penalty: 0.3 };
+    const pacingPenalty = e.provider === (pacing.provider ?? "openrouter") && hrs >= (pacing.thresholdHours ?? 4) ? (pacing.penalty ?? 0.3) : 0;
     return usedFraction(
       {
         rec: ctx.getUsage?.(e.id),

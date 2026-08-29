@@ -65,6 +65,11 @@ export interface RequestCtx {
   getReliability?: (id: string) => { score: number | null; samples: number } | undefined;
   reliabilityCfg?: { minSamples: number; demoteBelow: number };
   now?: number;
+  pacing?: {
+    provider?: string;
+    thresholdHours?: number;
+    penalty?: number;
+  };
 }
 
 export interface DailyCaps {

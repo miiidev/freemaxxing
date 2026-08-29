@@ -89,6 +89,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           getProviderCaps: (p) => providerCaps[p],
           getProviderState: liveProviderState,
           now: Date.now(),
+          pacing: deps.config.pacing,
         },
       );
     } catch (e) {
