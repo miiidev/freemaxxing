@@ -177,12 +177,17 @@ function exportStatsCmd(argv: string[]): number {
 async function printStatus(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
+  const allProviders = Object.keys(PROVIDERS);
   const providers = activeProviders(cfg, env);
   const states = loadState(defaultStatePath());
   const usageMap = loadUsage(defaultUsagePath());
+  const disabledProviders = allProviders.filter((p) => {
+    const cfgProvider = cfg.providers[p];
+    return !(cfgProvider?.enabled ?? PROVIDERS[p]?.enabled ?? true);
+  });
   const providerCount = Object.keys(providers).length;
   const registryProviderCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
-  console.log(`maxout status - ${providerCount}/${registryProviderCount} providers have keys`);
+  console.log(`maxout status - ${providerCount}/${registryProviderCount} providers enabled (${disabledProviders.length} disabled)`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);
@@ -201,8 +206,9 @@ async function printStatus(): Promise<void> {
   for (const [provider, entries] of groups) {
     const caps = providerCaps[provider];
     if (caps) {
+      const dispName = disabledProviders.includes(provider) ? `${provider} [disabled]` : provider;
       console.log(formatPoolLine(
-        provider, caps, aggregateProvider(usageMap, provider),
+        dispName, caps, aggregateProvider(usageMap, provider),
         states.get(poolKey(provider)) ?? { state: "ok" }, entries.length, now,
       ));
     }
@@ -308,12 +314,9 @@ export async function runCli(argv: string[]): Promise<number> {
       process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
       return 64;
     }
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<AppConfig>;
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as any;
     if (!raw.providers) raw.providers = {};
-    if (!PROVIDERS[provider]) {
-      process.stderr.write(`Unknown provider '${provider}'. Options: ${Object.keys(PROVIDERS).join(", ")}\n`);
-      return 64;
-    }
+    if (!raw.providers[provider]) raw.providers[provider] = {};
     raw.providers[provider].enabled = false;
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2));
     console.log(`Disabled provider '${provider}'`);
@@ -332,12 +335,9 @@ export async function runCli(argv: string[]): Promise<number> {
       process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
       return 64;
     }
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<AppConfig>;
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as any;
     if (!raw.providers) raw.providers = {};
-    if (!PROVIDERS[provider]) {
-      process.stderr.write(`Unknown provider '${provider}'. Options: ${Object.keys(PROVIDERS).join(", ")}\n`);
-      return 64;
-    }
+    if (!raw.providers[provider]) raw.providers[provider] = {};
     raw.providers[provider].enabled = true;
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2));
     // Verify key exists when not forcing
