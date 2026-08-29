@@ -1,15 +1,30 @@
 export interface SetupProvider {
   name: string;
   envVar: string;
-  signupUrl: string;
+  signupUrl?: string;  // optional — null for local provider
   baseURL: string;
 }
 
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import readline from "node:readline/promises";
 import type { Readable, Writable } from "node:stream";
+
+export interface LocalModelConfig {
+  name: string;        // e.g., "qwen2.5-coder:3b"
+  description: string; // human-readable description
+}
+
+/** Pre-configured local model options */
+export const LOCAL_MODEL_OPTIONS: LocalModelConfig[] = [
+  { name: "qwen2.5-coder:3b", description: "Qwen 2.5 Coder 3B (code specialist)" },
+  { name: "phi4-mini:latest", description: "Phi 4 Mini (general purpose)" },
+  { name: "llama3.2:latest", description: "Llama 3.2 (general purpose)" },
+  { name: "mistral:latest", description: "Mistral (fast general purpose)" },
+  { name: "gemma:latest", description: "Gemma (Google's model)" },
+];
 
 // Ordered by onboarding friction — groq is the recommended first key.
 // GitHub Models omitted: provider retired July 2026.
@@ -19,6 +34,7 @@ export const SETUP_PROVIDERS: SetupProvider[] = [
   { name: "openrouter", envVar: "OPENROUTER_API_KEY", signupUrl: "https://openrouter.ai/settings/keys", baseURL: "https://openrouter.ai/api/v1" },
   { name: "mistral", envVar: "MISTRAL_API_KEY", signupUrl: "https://console.mistral.ai/api-keys", baseURL: "https://api.mistral.ai/v1" },
   { name: "cerebras", envVar: "CEREBRAS_API_KEY", signupUrl: "https://cloud.cerebras.ai", baseURL: "https://api.cerebras.ai/v1" },
+  { name: "local", envVar: "LOCAL_API_KEY", signupUrl: undefined, baseURL: "http://localhost:11434" },
 ];
 
 // Whole-file rewrite after merge: keep lines we don't manage verbatim,
@@ -42,13 +58,31 @@ function joinURL(base: string, pathPart: string): string {
   return base.replace(/\/+$/, "") + pathPart;
 }
 
+async function listInstalledLocalModels(
+  baseURL: string,
+  fetchImpl: typeof fetch,
+  out: (...lines: string[]) => void
+): Promise<Set<string>> {
+  const installed = new Set<string>();
+  try {
+    const res = await fetchImpl(joinURL(baseURL, "/api/tags"), {
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return installed;
+    const data = (await res.json()) as { models: { name: string }[] };
+    data.models.forEach((m) => installed.add(m.name));
+  } catch {
+    out(`⚠ Could not reach Ollama at ${baseURL}; assuming no models installed`);
+  }
+  return installed;
+}
+
 export interface KeyValidation {
   ok: boolean;
   detail?: string;
 }
 
-// Lightweight liveness/auth probe — GET /models is free on every provider.
-export async function validateKey(
+async function validateKey(
   baseURL: string,
   key: string,
   fetchImpl: typeof fetch = fetch,
@@ -87,7 +121,15 @@ export interface SetupOptions {
 export async function runSetup(opts: SetupOptions): Promise<number> {
   if (!opts.interactive) {
     const provider = SETUP_PROVIDERS.find((p) => p.name === opts.provider);
-    if (!opts.provider || !opts.key || !provider) return 64;
+    if (!opts.provider || !provider) return 64;
+    if (!opts.key) return 64;
+    if (provider.name === "local") {
+      // Save a dummy key for local — the executor will skip auth
+      await saveEnv(opts.envPath, provider, "local");
+      process.stderr.write(`saved ${provider.envVar} to ${opts.envPath}\n`);
+      process.stderr.write("start serving: node dist/cli.js serve\n");
+      return 0;
+    }
     const verdict = await validateKey(provider.baseURL, opts.key, opts.fetchImpl);
     if (!verdict.ok) {
       process.stderr.write(`key rejected (${verdict.detail}); nothing was written\n`);
@@ -155,15 +197,99 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
     const [first] = rest.splice(chosenIdx, 1);
 
     const collect = async (provider: SetupProvider): Promise<boolean> => {
-      out("", `Opening ${provider.signupUrl}`, "(paste an API key when you have one)");
+      out("", `Opening ${provider.signupUrl ?? provider.baseURL}`, "(paste an API key when you have one)");
       try {
-        opts.openImpl?.(provider.signupUrl);
+        opts.openImpl?.(provider.signupUrl ?? provider.baseURL);
       } catch {
         // opening a browser is best-effort
       }
       for (let attempt = 1; attempt <= 3; attempt++) {
         const key = await ask(`${provider.envVar}: `);
         if (!key) continue;
+        // Local provider: no key validation needed, just save the URL and ask about models
+        if (provider.name === "local") {
+          // Detect which models are already installed in Ollama
+          const installedModels = await listInstalledLocalModels(
+            provider.baseURL,
+            opts.fetchImpl ?? fetch,
+            out
+          );
+          // Ask which local models to enable
+          out("");
+          out("Available local models (Ollama/llama.cpp):");
+          LOCAL_MODEL_OPTIONS.forEach((m, i) => {
+            const status = installedModels.has(m.name) ? "✓ installed" : "✗ not installed";
+            out(`  ${i + 1}. ${m.name}  ${status}`);
+          });
+          out("  0. Skip (no local models enabled)");
+
+          const input = await ask(`Select models (comma-separated numbers, or 0 to skip): `);
+          if (input.trim() === "0") {
+            await saveEnv(opts.envPath, provider, key);
+            out(`saved ${provider.envVar} (local mode)`);
+            out("No local models enabled.");
+            return true;
+          }
+
+          const choices = input.split(",").map((s) => s.trim()).filter((s) => s !== "");
+          const selected: string[] = [];
+          for (const choice of choices) {
+            const idx = Number(choice) - 1;
+            if (idx >= 0 && idx < LOCAL_MODEL_OPTIONS.length) {
+              selected.push(LOCAL_MODEL_OPTIONS[idx].name);
+            } else {
+              out(`Invalid selection: ${choice}`);
+            }
+          }
+
+          // Auto-pull missing models
+          const toPull = selected.filter((m) => !installedModels.has(m));
+          if (toPull.length > 0) {
+            out(`\nDownloading missing local models...`);
+            for (const model of toPull) {
+              out(`\n▶ ollama pull ${model}`);
+              const { spawn } = await import("node:child_process");
+              const child = spawn("ollama", ["pull", model], { stdio: "inherit" });
+              await new Promise<void>((resolve) => child.on("exit", resolve));
+              if (child.exitCode !== 0) {
+                out(`⚠ Failed to pull ${model} — run: ollama pull ${model}`);
+                // Remove from selected so it's not recorded
+                selected.splice(selected.indexOf(model), 1);
+              }
+            }
+          }
+
+          await saveEnv(opts.envPath, provider, key);
+          // Store model selection in config
+          if (selected.length > 0) {
+            const configPath = path.join(os.homedir(), ".maxout", "config.json");
+            let config: any = {};
+            if (fsSync.existsSync(configPath)) {
+              try {
+                config = JSON.parse(await fs.readFile(configPath, "utf8"));
+              } catch {
+                config = {};
+              }
+            }
+            config.localModels = selected;
+            // Ensure aliases include local models
+            if (!config.aliases) config.aliases = {};
+            if (config.aliases.autoAny && !config.aliases.autoAny.providers.includes("local")) {
+              config.aliases.autoAny.providers.push("local");
+            }
+            if (config.aliases.autoFast && !config.aliases.autoFast.providers.includes("local")) {
+              config.aliases.autoFast.providers.push("local");
+            }
+            if (config.aliases.autoCoding && !config.aliases.autoCoding.providers.includes("local")) {
+              config.aliases.autoCoding.providers.push("local");
+            }
+            await fs.writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
+            out(`Saved local model config: ${selected.join(", ")}`);
+          }
+          out(`saved ${provider.envVar} (local mode)`);
+          out(`Enabled local models: ${selected.length > 0 ? selected.join(", ") : "none"}`);
+          return true;
+        }
         const verdict = await validateKey(provider.baseURL, key, opts.fetchImpl);
         if (verdict.ok) {
           await saveEnv(opts.envPath, provider, key);
