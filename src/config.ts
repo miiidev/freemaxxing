@@ -11,6 +11,7 @@ export interface AppConfig {
   host: string;
   aliases: Record<string, AliasDef>;
   providers: Record<string, { apiKeyEnv: string; enabled?: boolean }>;
+  localModels?: string[];
   annotateResponses: boolean;
   harvest: boolean;
   modelLimits: Record<string, Partial<DailyCaps>>;
@@ -35,6 +36,7 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   google: "GEMINI_API_KEY",
   mistral: "MISTRAL_API_KEY",
   cerebras: "CEREBRAS_API_KEY",
+  local: "LOCAL_API_KEY",
 };
 export { DEFAULT_ENV_KEYS };
 
@@ -88,6 +90,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     port: 8787,
     host: "127.0.0.1",
     aliases: {},
+    localModels: [],
     annotateResponses: true,
     harvest: true,
     modelLimits: {},
@@ -119,6 +122,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
+    if (raw.localModels && Array.isArray(raw.localModels)) cfg.localModels = raw.localModels;
     if (typeof raw.ttfbTimeoutMs === "number" && raw.ttfbTimeoutMs > 0) cfg.ttfbTimeoutMs = raw.ttfbTimeoutMs;
     if (typeof raw.retryBackoffMs === "number" && raw.retryBackoffMs > 0) cfg.retryBackoffMs = raw.retryBackoffMs;
     if (raw.pacing && typeof raw.pacing === "object") {
@@ -149,7 +153,18 @@ export function activeProviders(
 }
 
 export function mergedAliases(cfg: AppConfig): Record<string, AliasDef> {
-  return { ...BUILT_IN_ALIASES, ...cfg.aliases };
+  const result: Record<string, AliasDef> = { ...BUILT_IN_ALIASES };
+  for (const [key, val] of Object.entries(cfg.aliases)) {
+    if (typeof val !== "object" || val === null) continue;
+    const alias = val as Record<string, unknown>;
+    const merged: AliasDef = { ...result[key] };
+    if (Array.isArray(alias.tags)) merged.tags = alias.tags as string[];
+    if (typeof alias.requireTools === "boolean") merged.requireTools = alias.requireTools;
+    if (typeof alias.minContext === "number") merged.minContext = alias.minContext;
+    if (typeof alias.preferSpeed === "boolean") merged.preferSpeed = alias.preferSpeed;
+    result[key] = merged;
+  }
+  return result;
 }
 
 // Provider pools are account/org-wide: every model under a provider shares one budget.

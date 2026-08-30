@@ -35,7 +35,7 @@ export const SETUP_PROVIDERS: SetupProvider[] = [
   { name: "openrouter", envVar: "OPENROUTER_API_KEY", signupUrl: "https://openrouter.ai/settings/keys", baseURL: "https://openrouter.ai/api/v1" },
   { name: "mistral", envVar: "MISTRAL_API_KEY", signupUrl: "https://console.mistral.ai/api-keys", baseURL: "https://api.mistral.ai/v1" },
   { name: "cerebras", envVar: "CEREBRAS_API_KEY", signupUrl: "https://cloud.cerebras.ai", baseURL: "https://api.cerebras.ai/v1" },
-  { name: "local", envVar: "LOCAL_API_KEY", signupUrl: undefined, baseURL: "http://localhost:11434" },
+  { name: "local", envVar: "LOCAL_API_KEY", signupUrl: undefined, baseURL: "http://localhost:11434/v1" },
 ];
 
 // Whole-file rewrite after merge: keep lines we don't manage verbatim,
@@ -207,7 +207,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
         if (provider.name === "local") {
           // Detect which models are already installed in Ollama
           const installedModels = await listInstalledLocalModels(
-            provider.baseURL,
+            provider.baseURL.replace(/\/v1\/?$/, ""),
             opts.fetchImpl ?? fetch,
             out
           );
@@ -270,7 +270,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
             }
             config.localModels = selected;
             if (!config.aliases) config.aliases = {};
-            for (const aliasName of ["autoAny", "autoFast", "autoCoding"]) {
+            for (const aliasName of ["auto/any", "auto/fast", "auto/coding"]) {
               const alias = config.aliases[aliasName];
               if (alias && Array.isArray(alias.providers) && !alias.providers.includes("local")) {
                 alias.providers.push("local");

@@ -82,3 +82,16 @@ export function applyModelLimits(
     return { ...e, limits: { ...e.limits, ...o } };
   });
 }
+
+export function buildLocalRegistry(localModels: string[]): RegistryEntry[] {
+  return localModels.map((name) => ({
+    id: `local::${name}`,
+    provider: "local",
+    upstream: name,
+    tags: ["coding", "chat"],
+    tier: 5,
+    speed: "medium" as const,
+    context: 128000,
+    tools: true,
+  }));
+}

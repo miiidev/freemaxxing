@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import { buildServer } from "./server.js";
-import { REGISTRY, applyModelLimits, PROVIDERS } from "./catalog.js";
+import { REGISTRY, applyModelLimits, buildLocalRegistry, PROVIDERS } from "./catalog.js";
 import {
   loadConfig, loadEnv, activeProviders, mergedAliases,
   defaultConfigPath, defaultStatePath, defaultEnvPath,
@@ -186,8 +186,9 @@ async function printStatus(): Promise<void> {
     return !(cfgProvider?.enabled ?? PROVIDERS[p]?.enabled ?? true);
   });
   const providerCount = Object.keys(providers).length;
-  const registryProviderCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
-  console.log(`maxout status - ${providerCount}/${registryProviderCount} providers enabled (${disabledProviders.length} disabled)`);
+  const registryCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
+  const localCount = (cfg.localModels ?? []).length > 0 ? 1 : 0;
+  console.log(`maxout status - ${providerCount}/${registryCount + localCount} providers enabled (${disabledProviders.length} disabled)`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);
@@ -196,7 +197,10 @@ async function printStatus(): Promise<void> {
   console.log("");
   const providerCaps = mergedProviderCaps(cfg);
   const groups = new Map<string, RegistryEntry[]>();
-  for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
+  for (const entry of [
+    ...applyModelLimits(REGISTRY, cfg.modelLimits),
+    ...buildLocalRegistry(cfg.localModels ?? []),
+  ]) {
     if (!providers[entry.provider]) continue;
     const list = groups.get(entry.provider) ?? [];
     list.push(entry);
@@ -251,11 +255,15 @@ export async function runCli(argv: string[]): Promise<number> {
     bindUsageFile(defaultUsagePath()); // every served request is persisted as it happens
     bindMalformedFile(defaultMalformedPath()); // quality events survive nothing — append-only log
     bindReliabilityFile(defaultReliabilityPath()); // outcomes survive restarts like usage counters
+    const registry = [
+      ...applyModelLimits(REGISTRY, cfg.modelLimits),
+      ...buildLocalRegistry(cfg.localModels ?? []),
+    ];
     const app = buildServer({
       config: cfg,
       providers,
       aliases: mergedAliases(cfg),
-      registry: applyModelLimits(REGISTRY, cfg.modelLimits),
+      registry,
       stateMap: loadState(defaultStatePath()),
       usageMap: loadUsage(defaultUsagePath()),
       providerCaps: mergedProviderCaps(cfg),
@@ -263,7 +271,10 @@ export async function runCli(argv: string[]): Promise<number> {
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
-    const registryProviderCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
+    const registryProviderCount = new Set([
+      ...applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider),
+      ...(cfg.localModels ?? []).length > 0 ? ["local"] : [],
+    ]).size;
     console.log(
       `maxout serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
     );
