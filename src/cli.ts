@@ -187,9 +187,8 @@ async function printStatus(): Promise<void> {
     return !(cfgProvider?.enabled ?? PROVIDERS[p]?.enabled ?? true);
   });
   const providerCount = Object.keys(providers).length;
-  const registryCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
-  const localCount = (cfg.localModels ?? []).length > 0 ? 1 : 0;
-  console.log(`freemaxxing status - ${providerCount}/${registryCount + localCount} providers enabled (${disabledProviders.length} disabled)`);
+  const totalCount = allProviders.length;
+  console.log(`freemaxxing status - ${providerCount}/${totalCount} providers enabled (${disabledProviders.length} disabled)`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);
