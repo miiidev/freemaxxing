@@ -20,7 +20,7 @@
 - With only Groq configured, `auto/coding` has exactly 3 servable candidates (`gpt-oss-120b`, `gpt-oss-20b`, `qwen3.6-27b`), all behind one provider pool.
 - Three candidates is a small safety margin relative to what the README's "pools everything" pitch implies.
 
-**Fix direction:** Nudge harder in the wizard/first-run output toward a second key ("bonus capacity" currently framed as fully optional — consider making it feel more consequential), or surface a warning in `maxout status` / first `serve` startup when the active candidate count for `auto/coding` is below some threshold (e.g. < 5).
+**Fix direction:** Nudge harder in the wizard/first-run output toward a second key ("bonus capacity" currently framed as fully optional — consider making it feel more consequential), or surface a warning in `freemaxxing status` / first `serve` startup when the active candidate count for `auto/coding` is below some threshold (e.g. < 5).
 
 ## Cause 3 — Malformed tool-call failures don't change model state, so they can cascade
 
@@ -32,11 +32,11 @@
 
 ## Supporting fix — distinguish error causes in the 503 body
 
-`all_models_exhausted` currently reads as pure capacity exhaustion regardless of which of the three causes above is actually responsible. Add a coarse classification to the error response (e.g. `mostly_rate_limited` / `mostly_malformed` / `mostly_no_key`) derived from the `attempts` reasons, so both `maxout trace` and any client-side logic can tell the difference immediately instead of parsing the `attempts` array by hand.
+`all_models_exhausted` currently reads as pure capacity exhaustion regardless of which of the three causes above is actually responsible. Add a coarse classification to the error response (e.g. `mostly_rate_limited` / `mostly_malformed` / `mostly_no_key`) derived from the `attempts` reasons, so both `freemaxxing trace` and any client-side logic can tell the difference immediately instead of parsing the `attempts` array by hand.
 
 ## Suggested sequencing
 
-1. **Instrument first** — capture `attempts` from a real 503, or run `maxout trace <id>`, to confirm which of the three causes is actually firing.
+1. **Instrument first** — capture `attempts` from a real 503, or run `freemaxxing trace <id>`, to confirm which of the three causes is actually firing.
 2. **Ship the malformed-cascade cooldown fix** — cheapest, highest-leverage fix for the specific OpenCode pain reported.
 3. **Add OpenRouter pool warning + basic daily pacing** — directly blunts the most common failure mode.
 4. **Clean up the `github` ghost provider and key-presence filtering** — small, mechanical, improves signal quality for future debugging.

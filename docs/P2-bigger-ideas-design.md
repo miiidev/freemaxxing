@@ -2,7 +2,7 @@
 
 ## 1. Mid-stream failover
 
-Currently: failover only happens pre-first-byte; a stream dying mid-response surfaces as a single `maxout_error` SSE frame (`server.ts`, `sse.ts`) and the client has to handle it. For an agent harness mid-tool-call, this is exactly the kind of jank that breaks "smooth af."
+Currently: failover only happens pre-first-byte; a stream dying mid-response surfaces as a single `freemaxxing_error` SSE frame (`server.ts`, `sse.ts`) and the client has to handle it. For an agent harness mid-tool-call, this is exactly the kind of jank that breaks "smooth af."
 
 **Harder but more differentiating version:** detect a dead stream, silently retry against the next candidate, and either restart the response cleanly or splice in a note that generation continued on a different model. Most lightweight proxies punt on this because resuming generation across models is genuinely tricky — which is exactly why doing it well would stand out.
 
@@ -12,7 +12,7 @@ All current providers are cloud free-tiers with real caps. A local model via Oll
 
 ## 3. Make reliability scoring a first-class routing input, not just a report
 
-`reliability.ts` already tracks truncations/latency/validation failures and can demote flaky models — but it's currently gated behind `maxout status --reliability` as an opt-in view rather than always shaping default routing (it *is* wired into `router.ts`'s sort via `demoted()`, but the visibility/reporting side is separate from the routing side in a way that's worth tightening — see the malformed-cascade issue in P0 Cause 3 for a concrete case where this matters).
+`reliability.ts` already tracks truncations/latency/validation failures and can demote flaky models — but it's currently gated behind `freemaxxing status --reliability` as an opt-in view rather than always shaping default routing (it *is* wired into `router.ts`'s sort via `demoted()`, but the visibility/reporting side is separate from the routing side in a way that's worth tightening — see the malformed-cascade issue in P0 Cause 3 for a concrete case where this matters).
 
 ## 4. Provider adapters as a plugin surface
 
@@ -20,7 +20,7 @@ Free-tier terms shift constantly (GitHub Models retiring is already handled as a
 
 ## 5. Minimal local dashboard over the CLI
 
-`maxout status` / `maxout trace` are good, but a tiny local web view (quota bars, cooldown timers, live trace feed) would make debugging visual instead of CLI-output-parsing — lowering the barrier for less CLI-comfortable users and widening who the project is useful to. Doesn't need to be fancy — even a static HTML page hitting a local `/debug` endpoint would help.
+`freemaxxing status` / `freemaxxing trace` are good, but a tiny local web view (quota bars, cooldown timers, live trace feed) would make debugging visual instead of CLI-output-parsing — lowering the barrier for less CLI-comfortable users and widening who the project is useful to. Doesn't need to be fancy — even a static HTML page hitting a local `/debug` endpoint would help.
 
 ## 6. Optional model pinning (opt-in, not default)
 
