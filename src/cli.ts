@@ -108,7 +108,7 @@ export function noProvidersHint(): string[] {
     "Fix by doing ONE of:",
     '  1. Set a key in this shell (session-only):   $env:GROQ_API_KEY = "gsk_..."   <- PowerShell',
     "                                               set GROQ_API_KEY=gsk_...          <- cmd.exe",
-    "  2. Persist it across sessions: create a file at ~/.maxout/.env containing one key per line,",
+    "  2. Persist it across sessions: create a file at ~/.freemaxxing/.env containing one key per line,",
     "     e.g.  GROQ_API_KEY=gsk_...",
     "     Recognized names: OPENROUTER_API_KEY GROQ_API_KEY GEMINI_API_KEY MISTRAL_API_KEY CEREBRAS_API_KEY",
     "Note: in PowerShell, `set NAME=value` does NOT create an environment variable - use $env:NAME = value.",
@@ -145,7 +145,7 @@ export function buildExportSnapshot(
 async function printReliabilityTable(): Promise<void> {
   const cfg = loadConfig(defaultConfigPath());
   const map = loadReliability(defaultReliabilityPath(), Date.now(), cfg.reliability);
-  console.log("maxout reliability (rolling window)");
+  console.log("freemaxxing reliability (rolling window)");
   console.log("");
   for (const entry of applyModelLimits(REGISTRY, cfg.modelLimits)) {
     const s = stats(map.get(entry.id) ?? []);
@@ -189,7 +189,7 @@ async function printStatus(): Promise<void> {
   const providerCount = Object.keys(providers).length;
   const registryCount = new Set(applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider)).size;
   const localCount = (cfg.localModels ?? []).length > 0 ? 1 : 0;
-  console.log(`maxout status - ${providerCount}/${registryCount + localCount} providers enabled (${disabledProviders.length} disabled)`);
+  console.log(`freemaxxing status - ${providerCount}/${registryCount + localCount} providers enabled (${disabledProviders.length} disabled)`);
   if (providerCount === 0) {
     console.log("");
     for (const line of noProvidersHint()) console.log(line);
@@ -260,7 +260,7 @@ export async function runCli(argv: string[]): Promise<number> {
     if (shouldAutoSetup(Object.keys(providers).length, interactive)) {
       console.log("no API keys found - starting first-run setup (ctrl-c to skip)");
       await runSetup({ envPath: defaultEnvPath(), interactive: true });
-      // The wizard may have written keys to ~/.maxout/.env — pick them up.
+      // The wizard may have written keys to ~/.freemaxxing/.env — pick them up.
       env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
       providers = activeProviders(cfg, env);
     }
@@ -289,7 +289,7 @@ export async function runCli(argv: string[]): Promise<number> {
       ...(cfg.localModels ?? []).length > 0 ? ["local"] : [],
     ]).size;
     console.log(
-      `maxout serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
+      `freemaxxing serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
     );
 
     // -- Status summary + hints --
@@ -306,9 +306,9 @@ export async function runCli(argv: string[]): Promise<number> {
       const parts: string[] = [];
       if (exhaustedCount > 0) parts.push(`${exhaustedCount} exhausted`);
       if (cooldownCount > 0) parts.push(`${cooldownCount} cooling`);
-      console.log(`  Note: ${parts.join(", ")}  ·  maxout status for details`);
+      console.log(`  Note: ${parts.join(", ")}  ·  freemaxxing status for details`);
       if (exhaustedCount > 0) {
-        console.log(`  Fix:   maxout revive <model-id> to clear, or wait for UTC midnight reset`);
+        console.log(`  Fix:   freemaxxing revive <model-id> to clear, or wait for UTC midnight reset`);
       }
     }
     if (providerCount === 0) {
@@ -338,7 +338,7 @@ export async function runCli(argv: string[]): Promise<number> {
   if (cmd === "revive") {
     const target = argv[1];
     if (!target) {
-      process.stderr.write("usage: maxout revive <model-id | provider-name>\n");
+      process.stderr.write("usage: freemaxxing revive <model-id | provider-name>\n");
       return 64;
     }
     const { removed } = reviveCmd(target, defaultStatePath());
@@ -350,12 +350,12 @@ export async function runCli(argv: string[]): Promise<number> {
   if (cmd === "disable") {
     const provider = argv[1];
     if (!provider) {
-      process.stderr.write("usage: maxout disable <provider>\n");
+      process.stderr.write("usage: freemaxxing disable <provider>\n");
       return 64;
     }
     const configPath = defaultConfigPath();
     if (!fs.existsSync(configPath)) {
-      process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
+      process.stderr.write(`No config found at ${configPath}. Run freemaxxing setup first.\n`);
       return 64;
     }
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as any;
@@ -371,12 +371,12 @@ export async function runCli(argv: string[]): Promise<number> {
     const provider = argv[1];
     const force = argv.includes("--force");
     if (!provider) {
-      process.stderr.write("usage: maxout enable <provider> [--force]\n");
+      process.stderr.write("usage: freemaxxing enable <provider> [--force]\n");
       return 64;
     }
     const configPath = defaultConfigPath();
     if (!fs.existsSync(configPath)) {
-      process.stderr.write(`No config found at ${configPath}. Run maxout setup first.\n`);
+      process.stderr.write(`No config found at ${configPath}. Run freemaxxing setup first.\n`);
       return 64;
     }
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as any;
@@ -396,7 +396,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: maxout [serve|status|setup|export-stats|revive]\n");
+  process.stderr.write("usage: freemaxxing [serve|status|setup|export-stats|revive]\n");
   return 64;
 }
 

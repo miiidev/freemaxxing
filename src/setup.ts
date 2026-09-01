@@ -173,7 +173,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
 
   try {
     out(
-      "maxout setup",
+      "freemaxxing setup",
       "",
       "One free provider is enough to start. Recommended: Groq (fast signup, generous free tier).",
       "Providers:",
@@ -271,7 +271,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
           await saveEnv(opts.envPath, provider, key);
           // Store model selection in config
           if (selected.length > 0) {
-            const configPath = path.join(os.homedir(), ".maxout", "config.json");
+            const configPath = path.join(os.homedir(), ".freemaxxing", "config.json");
             let config: any = {};
             if (fsSync.existsSync(configPath)) {
               try {
@@ -320,7 +320,7 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
       "",
       saved > 0
         ? `Done — ${saved} provider key(s) in ${opts.envPath}. Start with: node dist/cli.js serve`
-        : "No keys saved. Re-run maxout setup whenever you're ready.",
+        : "No keys saved. Re-run freemaxxing setup whenever you're ready.",
     );
     return saved > 0 ? 0 : 1;
   } finally {

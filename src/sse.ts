@@ -70,11 +70,11 @@ export function sseAnnotator(modelId: string): Transform {
 function annotationFrame(modelId: string): string {
   return (
     `data: ${JSON.stringify({
-      id: "maxout",
+      id: "freemaxxing",
       object: "chat.completion.chunk",
       created: 0,
       model: modelId,
-      choices: [{ index: 0, delta: { content: `\n\n---\n*maxout: ${modelId}*` }, finish_reason: null }],
+      choices: [{ index: 0, delta: { content: `\n\n---\n*freemaxxing: ${modelId}*` }, finish_reason: null }],
     })}\n\n`
   );
 }
@@ -85,7 +85,7 @@ export interface ToolGuardOptions {
 }
 
 // Reassembles streamed tool-call deltas, validates the assembled call at
-// stream end, and on failure emits maxout_error BEFORE the held [DONE] —
+// stream end, and on failure emits freemaxxing_error BEFORE the held [DONE] —
 // SSE clients stop reading at [DONE], so the frame must land first.
 export function sseToolCallGuard(opts: ToolGuardOptions): Transform {
   let buffer = "";
@@ -147,7 +147,7 @@ export function sseToolCallGuard(opts: ToolGuardOptions): Transform {
       opts.onVerdict?.(verdict);
       if (!verdict.ok) {
         this.push(`data: ${JSON.stringify({
-          maxout_error: "malformed_tool_call",
+          freemaxxing_error: "malformed_tool_call",
           detail: verdict.reason,
         })}\n\n`);
       }

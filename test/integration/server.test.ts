@@ -41,7 +41,7 @@ describe("GET /v1/models", () => {
     const body = res.json();
     expect(res.statusCode).toBe(200);
     expect(body.object).toBe("list");
-    expect(body.data.find((m: { id: string }) => m.id === "auto/coding").maxout_alias).toBe(true);
+    expect(body.data.find((m: { id: string }) => m.id === "auto/coding").freemaxxing_alias).toBe(true);
     expect(body.data.some((m: { id: string }) => m.id === "groq::openai/gpt-oss-120b")).toBe(true);
   });
 });
@@ -80,7 +80,7 @@ describe("POST /v1/chat/completions", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(String(res.json().model)).toMatch(/^groq::/);
-    expect(res.headers["x-maxout-served-by"]).toMatch(/^groq::/);
+    expect(res.headers["x-freemaxxing-served-by"]).toMatch(/^groq::/);
   });
 
   it("defaults missing model to auto/coding", async () => {
@@ -141,7 +141,7 @@ describe("POST /v1/chat/completions", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.choices[0].message.content).toMatch(/\n\n---\n\*maxout: groq::/);
+    expect(body.choices[0].message.content).toMatch(/\n\n---\n\*freemaxxing: groq::/);
   });
 
   it("non-streaming with annotateResponses=false leaves content untouched", async () => {
@@ -285,7 +285,7 @@ describe("non-streaming tool-call validation", () => {
     bindMalformedFile(null);
 
     expect(res.statusCode).toBe(200);
-    expect(res.headers["x-maxout-served-by"]).toBe("p::good");
+    expect(res.headers["x-freemaxxing-served-by"]).toBe("p::good");
     expect(loadMalformed(path.join(dir, "malformed.jsonl"))).toEqual([
       { ts: expect.any(Number), model: "p::bad", reason: "tool_calls[0]:arguments-not-json" },
     ]);

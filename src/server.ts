@@ -66,7 +66,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const aliasData = Object.keys(deps.aliases).map((alias) => ({
       id: alias,
       object: "model",
-      maxout_alias: true,
+      freemaxxing_alias: true,
     }));
     const modelData = deps.registry.map((e) => ({ id: e.id, object: "model" }));
     return { object: "list", data: [...aliasData, ...modelData] };
@@ -204,8 +204,8 @@ const candidates = resolved.candidates;
         (ms) => effective(ms, Date.now()).state === "exhausted",
       ).length;
       const hint = exhaustedCount > 0
-        ? `Run: maxout revive <model-id> to clear exhaustion, or wait for UTC midnight reset`
-        : `All models are cooling down - try again later, or run: maxout revive <model-id>`;
+        ? `Run: freemaxxing revive <model-id> to clear exhaustion, or wait for UTC midnight reset`
+        : `All models are cooling down - try again later, or run: freemaxxing revive <model-id>`;
       return reply.code(503).send(
         err("all_models_exhausted", `No free model available for ${alias} right now.`, {
           attempts: result.attempts,
@@ -228,13 +228,13 @@ const candidates = resolved.candidates;
         tokensIn: num(u?.prompt_tokens) ?? num(u?.total_tokens) ?? estTokens,
         tokensOut: num(u?.completion_tokens) ?? 0,
       });
-      reply.header("x-maxout-served-by", servedId);
+      reply.header("x-freemaxxing-served-by", servedId);
       if (deps.config.annotateResponses) {
         const choices = json.choices as Array<Record<string, unknown>> | undefined;
         const choice0 = choices?.[0];
         const message = choice0?.message as Record<string, unknown> | undefined;
         if (choice0?.finish_reason === "stop" && typeof message?.content === "string") {
-          message.content += `\n\n---\n*maxout: ${servedId}*`;
+          message.content += `\n\n---\n*freemaxxing: ${servedId}*`;
         }
       }
       note(servedId, true, started);
@@ -248,7 +248,7 @@ const candidates = resolved.candidates;
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
       connection: "keep-alive",
-      "x-maxout-served-by": servedId,
+      "x-freemaxxing-served-by": servedId,
     });
 
     const upstream = Readable.fromWeb(result.response.body as import("stream/web").ReadableStream);
@@ -290,9 +290,9 @@ const candidates = resolved.candidates;
           if (link === upstream) {
             upstreamDied = true;
             const hint = deps.stateMap.size > 0
-              ? `Run: maxout revive <model-id> to clear exhaustion`
-              : `Run: maxout setup to add providers`;
-            reply.raw.write(`data: {"maxout_error":"upstream_stream_failed","hint":"${hint}"}\n\n`);
+              ? `Run: freemaxxing revive <model-id> to clear exhaustion`
+              : `Run: freemaxxing setup to add providers`;
+            reply.raw.write(`data: {"freemaxxing_error":"upstream_stream_failed","hint":"${hint}"}\n\n`);
           }
           reply.raw.end();
         }

@@ -49,10 +49,10 @@ describe("sseToolCallGuard", () => {
     ];
     const { out, verdict } = await run(frames, { tools: [PATCH] });
     expect(verdict?.ok).toBe(false);
-    expect(out).toContain('"maxout_error":"malformed_tool_call"');
+    expect(out).toContain('"freemaxxing_error":"malformed_tool_call"');
     expect(out).toContain("arguments-not-json");
     const doneIdx = out.indexOf("data: [DONE]");
-    const errIdx = out.indexOf('"maxout_error":"malformed_tool_call"');
+    const errIdx = out.indexOf('"freemaxxing_error":"malformed_tool_call"');
     expect(errIdx).toBeGreaterThan(-1);
     expect(errIdx).toBeLessThan(doneIdx);
   });
@@ -65,6 +65,6 @@ describe("sseToolCallGuard", () => {
     ];
     const { out, verdict } = await run(frames);
     expect(verdict).toEqual({ ok: false, reason: "cutoff-length" });
-    expect(out).toContain('"maxout_error":"malformed_tool_call"');
+    expect(out).toContain('"freemaxxing_error":"malformed_tool_call"');
   });
 });

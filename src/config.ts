@@ -43,22 +43,22 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
 export { DEFAULT_ENV_KEYS };
 
 export function defaultConfigPath(): string {
-  return path.join(os.homedir(), ".maxout", "config.json");
+  return path.join(os.homedir(), ".freemaxxing", "config.json");
 }
 export function defaultStatePath(): string {
-  return path.join(os.homedir(), ".maxout", "state.json");
+  return path.join(os.homedir(), ".freemaxxing", "state.json");
 }
 export function defaultEnvPath(): string {
-  return path.join(os.homedir(), ".maxout", ".env");
+  return path.join(os.homedir(), ".freemaxxing", ".env");
 }
 export function defaultUsagePath(): string {
-  return path.join(os.homedir(), ".maxout", "usage.json");
+  return path.join(os.homedir(), ".freemaxxing", "usage.json");
 }
 export function defaultMalformedPath(): string {
-  return path.join(os.homedir(), ".maxout", "malformed.jsonl");
+  return path.join(os.homedir(), ".freemaxxing", "malformed.jsonl");
 }
 export function defaultReliabilityPath(): string {
-  return path.join(os.homedir(), ".maxout", "reliability.json");
+  return path.join(os.homedir(), ".freemaxxing", "reliability.json");
 }
 
 export function parseEnvFile(text: string): Record<string, string> {

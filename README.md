@@ -1,4 +1,4 @@
-# maxout
+# freemaxxing
 
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
@@ -11,14 +11,14 @@ local model if configured).
 ## Quickstart
 
     git clone <this-repo>
-    cd maxout
+    cd freemaxxing
     npm install
     npm start
 
 That's it — if no API keys are configured yet, the setup wizard launches
 automatically before the server starts. It recommends a **single** provider
 (Groq — fast signup, generous free tier), opens the key page, validates your
-key with a live call, and stores it in `%USERPROFILE%\.maxout\.env`. When at
+key with a live call, and stores it in `%USERPROFILE%\.freemaxxing\.env`. When at
 least one key is saved the server starts immediately; adding more providers
 later is optional bonus capacity.
 
@@ -27,7 +27,7 @@ fallback — see "Local LLM Support" below.
 
 No clone? The package is npx-ready:
 
-    npx github:<owner>/maxout
+    npx github:<owner>/freemaxxing
 
 Scripted equivalent (CI, dotfiles):
 
@@ -36,11 +36,11 @@ Scripted equivalent (CI, dotfiles):
 Then point any OpenAI-compatible tool at the server:
 
     base URL: http://127.0.0.1:8787/v1
-    API key:  anything (maxout does not check client keys)
+    API key:  anything (freemaxxing does not check client keys)
     model:    auto/coding | auto/fast | auto/any
 
-Prefer manual setup? Re-run `maxout setup` anytime, or set any subset of these
-as environment variables (a `.env` in `~/.maxout/` is loaded):
+Prefer manual setup? Re-run `freemaxxing setup` anytime, or set any subset of these
+as environment variables (a `.env` in `~/.freemaxxing/` is loaded):
 `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
 `CEREBRAS_API_KEY`, `LOCAL_API_KEY`.
 
@@ -55,17 +55,17 @@ as environment variables (a `.env` in `~/.maxout/` is loaded):
 | auto/fast   | fastest available models first |
 | auto/any    | everything, quality-ranked |
 
-Define custom aliases in `~/.maxout/config.json`:
+Define custom aliases in `~/.freemaxxing/config.json`:
 
     { "aliases": { "auto/long": { "tags": ["long-context"], "requireTools": false } } }
 
 ## Configuration
 
-Keys are read from environment variables (a `.env` in `~/.maxout/` is loaded):
+Keys are read from environment variables (a `.env` in `~/.freemaxxing/` is loaded):
 `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
 `CEREBRAS_API_KEY`, `LOCAL_API_KEY`. Providers without keys are skipped.
 (`GITHUB_TOKEN` is accepted but inert: GitHub Models was retired in July 2026 — see docs/registry-notes.md.)
-Port/host are configurable in `~/.maxout/config.json`, along with quota-harvest
+Port/host are configurable in `~/.freemaxxing/config.json`, along with quota-harvest
 settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" below).
 
 ### Custom local endpoint
@@ -86,20 +86,20 @@ Shows every model in a formatted table with its current limit state (`ok`,
 Pooled providers appear once as a `[pool] …` line shared by their models;
 per-model rows carry reason codes (`cooldown 3m (peak-throttle)`,
 `exhausted (pool) until …`, `retired since …`). Clear stuck state with
-`maxout revive <model-id>` (or a bare provider name to unblock a pool).
+`freemaxxing revive <model-id>` (or a bare provider name to unblock a pool).
 
-When `maxout serve` starts with models in cooldown or exhaustion, a compact
+When `freemaxxing serve` starts with models in cooldown or exhaustion, a compact
 hint is shown:
 
-    Note: 3 exhausted, 1 cooling  ·  maxout status for details
-    Fix:   maxout revive <model-id> to clear, or wait for UTC midnight reset
+    Note: 3 exhausted, 1 cooling  ·  freemaxxing status for details
+    Fix:   freemaxxing revive <model-id> to clear, or wait for UTC midnight reset
 
 ## Transparency
 
 Every response carries the actual serving model in its `model` field and the
-`x-maxout-served-by` header. Failover happens only before the first streamed
-byte; mid-stream failures surface as a `maxout_error` SSE frame with an
-actionable `hint` field (e.g. `"Run: maxout revive <model-id> to clear exhaustion"`).
+`x-freemaxxing-served-by` header. Failover happens only before the first streamed
+byte; mid-stream failures surface as a `freemaxxing_error` SSE frame with an
+actionable `hint` field (e.g. `"Run: freemaxxing revive <model-id> to clear exhaustion"`).
 
 When all models are exhausted, the 503 error response also includes a `hint`
 field with recovery instructions.
@@ -113,18 +113,18 @@ which model actually served your request:
 <normal reply>
 
 ---
-*maxout: groq::openai/gpt-oss-120b*
+*freemaxxing: groq::openai/gpt-oss-120b*
 ```
 
-Disable it by setting `"annotateResponses": false` in `~/.maxout/config.json`.
+Disable it by setting `"annotateResponses": false` in `~/.freemaxxing/config.json`.
 
 ## Tool-call validation
 
 For tool-carrying requests Maxout validates tool-call payloads before your
 agent sees them: broken or truncated calls fail over silently before the first
-byte (non-streaming), or surface as a `{"maxout_error":"malformed_tool_call"}`
+byte (non-streaming), or surface as a `{"freemaxxing_error":"malformed_tool_call"}`
 SSE frame at stream end. Every rejection is logged locally as a reason code
-(`~/.maxout/malformed.jsonl`) — never the response content.
+(`~/.freemaxxing/malformed.jsonl`) — never the response content.
 
 ## Reliability
 
@@ -137,7 +137,7 @@ models beneath their static tier. See the numbers:
 Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
 when asked:
 
-    npx . export-stats --out maxout-stats.json
+    npx . export-stats --out freemaxxing-stats.json
 
 ## Quota harvest
 
@@ -149,10 +149,10 @@ Maxout tracks how much of each model's free-tier daily allowance you have spent
 - provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day) are respected across all their models;
 - a model that hits its cap is parked until the UTC reset, exactly like a 429 would.
 
-Spend shows up in `maxout status` (`req 12/50 · tok 84k/1M` per model, plus
+Spend shows up in `freemaxxing status` (`req 12/50 · tok 84k/1M` per model, plus
 `pool 3/1000` for provider-wide pools). Caps come from
 curated seeds in `registry.json`/`providers.json`; override or extend them per
-model or provider in `~/.maxout/config.json`:
+model or provider in `~/.freemaxxing/config.json`:
 
     { "harvest": false,                       // revert to v0 routing entirely
       "modelLimits":   { "google::gemini-2.5-pro": { "rpd": 100 } },
@@ -177,22 +177,22 @@ or [llama.cpp], configured to listen on `http://localhost:11434` by default.
    # ...start a server pointing at a .gguf model
    ```
 
-2. **Run the maxout setup wizard** and select **local** as a provider:
+2. **Run the freemaxxing setup wizard** and select **local** as a provider:
    ```bash
-   maxout setup
+   freemaxxing setup
    # → Select "local" from the provider list [1-6]
    # → Skip the API key prompt (local mode)
-   # → Config saved to `~/.maxout/.env`
+   # → Config saved to `~/.freemaxxing/.env`
    ```
 
    Or run non-interactively:
    ```bash
-   maxout setup --provider local --key local
+   freemaxxing setup --provider local --key local
    ```
 
 3. **Verify the local provider is active**:
    ```bash
-   maxout status
+   freemaxxing status
    # → You should see `[pool] local    req 0/1000000 · ok · resets 00:00 UTC`
    ```
 
@@ -204,13 +204,13 @@ Use the `local::model-name` format as your model identifier:
 # Via API or SDK:
 curl -X POST http://127.0.0.1:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer dummy-key-for-maxout" \
+  -H "Authorization: Bearer dummy-key-for-freemaxxing" \
   -d '{"model": "local::llama3.2:latest", "messages": [{"role": "user", "content": "Hello"}]}'
 
-# Via maxout CLI:
-maxout serve
+# Via freemaxxing CLI:
+freemaxxing serve
 # Then:
-echo "Hello" | maxout chat --model local::llama3.2:latest
+echo "Hello" | freemaxxing chat --model local::llama3.2:latest
 ```
 
 Or use aliases like `auto/any` — if the local provider is active, its models
@@ -221,7 +221,7 @@ will appear in the candidate pool.
 - The `local` provider in `providers.json` points at `http://localhost:11434` (the
   default Ollama address) — override with `"localBaseURL"` in config.json
 - Requests are forwarded to the local `/chat/completions` endpoint
-- No API key is sent to the local endpoint (maxout skips auth for local)
+- No API key is sent to the local endpoint (freemaxxing skips auth for local)
 - Rate limits are set to very high values (`rpd: 1M, tpd: 1M`) so local models
   never cause "exhausted" errors
 - Local models appear in the candidate pool alongside cloud free-tier models
@@ -236,20 +236,20 @@ will appear in the candidate pool.
   guarantees as cloud free tiers, and they count against no rate limit — use them
   as a fallthrough, not your everyday model.
 - To **disable** local support, just remove the `local` entry from
-  `~/.maxout/.env` and re-run `maxout serve`.
+  `~/.freemaxxing/.env` and re-run `freemaxxing serve`.
 
 Maxout is deliberately boring about your data:
 
-- Your API keys live only in your environment (or `%USERPROFILE%\.maxout\.env`)
+- Your API keys live only in your environment (or `%USERPROFILE%\.freemaxxing\.env`)
   and go directly to the provider you called. Maxout has no telemetry, no
   phoning home, and no third party in the middle — requests leave your machine
   straight for OpenRouter/Groq/Google/Mistral/Cerebras.
 - Prompt and response bodies are never written to disk. What IS stored locally
-  under `%USERPROFILE%\.maxout\`: daily spend counters (`usage.json`), model
+  under `%USERPROFILE%\.freemaxxing\`: daily spend counters (`usage.json`), model
   health states (`state.json`), quality outcomes as numbers (`reliability.json`),
   rejection reason codes (`malformed.jsonl`), and console lines naming which
   model answered.
-- `maxout export-stats` is the ONLY feature that produces shareable data. It
+- `freemaxxing export-stats` is the ONLY feature that produces shareable data. It
   runs solely when you invoke it and emits an allowlisted, anonymized summary
   (see above). Nothing is sent anywhere unless you send it.
 
@@ -260,16 +260,16 @@ Maxout is deliberately boring about your data:
 
 ## Integration with AI Coding Assistants
 
-Maxout can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate maxout with popular AI coding assistants:
+Maxout can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate freemaxxing with popular AI coding assistants:
 
 ### opencode
 
-Setup maxout as an OpenAI-compatible provider for opencode:
+Setup freemaxxing as an OpenAI-compatible provider for opencode:
 
 ```bash
-# From maxout project directory
-cd maxout
-npm start          # Start maxout server on http://127.0.0.1:8787/v1
+# From freemaxxing project directory
+cd freemaxxing
+npm start          # Start freemaxxing server on http://127.0.0.1:8787/v1
 ```
 
 In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`), add the provider:
@@ -277,7 +277,7 @@ In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config
 ```json
 {
   "provider": {
-    "maxout": {
+    "freemaxxing": {
       "name": "Maxout",
       "api": "openai",
       "options": {
@@ -291,24 +291,24 @@ In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config
       }
     }
   },
-  "model": "maxout/auto/coding"
+  "model": "freemaxxing/auto/coding"
 }
 ```
 
 **Notes:**
-- maxout doesn't require client API keys (use a dummy key)
+- freemaxxing doesn't require client API keys (use a dummy key)
 - `auto/coding` is optimized for coding tasks with tool support
 - `auto/fast` prioritizes speed over intelligence
 - `auto/any` includes all available free models
 
 ### Other OpenAI-Compatible Tools
 
-Any tool that speaks OpenAI's API can use maxout by pointing it to the local proxy:
+Any tool that speaks OpenAI's API can use freemaxxing by pointing it to the local proxy:
 
 #### General Configuration
 
     base URL: http://127.0.0.1:8787/v1
-    API key: anything (maxout does not check client keys)
+    API key: anything (freemaxxing does not check client keys)
     model: auto/coding | auto/fast | auto/any
 
 #### Examples
@@ -318,54 +318,54 @@ Any tool that speaks OpenAI's API can use maxout by pointing it to the local pro
 {
   "name": "Maxout Proxy",
   "endpoint": "http://127.0.0.1:8787/v1",
-  "apiKey": "dummy-key-for-maxout",
-  "model": "maxout/auto/coding"
+  "apiKey": "dummy-key-for-freemaxxing",
+  "model": "freemaxxing/auto/coding"
 }
 ```
 
 **Cline**
 - Set `API_ENDPOINT` to `http://127.0.0.1:8787/v1`
-- Set `API_KEY` to `dummy-key-for-maxout`
-- Set `MODEL` to `maxout/auto/coding`
+- Set `API_KEY` to `dummy-key-for-freemaxxing`
+- Set `MODEL` to `freemaxxing/auto/coding`
 
 **RooCode**
 - OpenAI-compatible endpoint: `http://127.0.0.1:8787/v1`
-- Use any model name (maxout handles aliasing internally)
+- Use any model name (freemaxxing handles aliasing internally)
 
 **Claude Code**
 - Configure to use OpenAI-compatible endpoint
 - Base URL: `http://127.0.0.1:8787/v1`
-- Model: `maxout/auto/coding`
+- Model: `freemaxxing/auto/coding`
 
 **Continue**
 - Set `openAiHost` to `http://127.0.0.1:8787/v1`
-- Any OpenAI-compatible model name works (e.g., `maxout/auto/coding`)
+- Any OpenAI-compatible model name works (e.g., `freemaxxing/auto/coding`)
 
 **OpenHands**
 ```yaml
 ai:
   provider: "openai"
-  model: "maxout/auto/coding"
+  model: "freemaxxing/auto/coding"
   endpoint: "http://127.0.0.1:8787/v1"
-  api_key: "dummy-key-for-maxout"
+  api_key: "dummy-key-for-freemaxxing"
 ```
 
 **Any HTTP Client**
 ```bash
 curl -X POST http://127.0.0.1:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer dummy-key-for-maxout" \
-  -d '{"model": "maxout/auto/coding", "messages": [{"role": "user", "content": "Hello"}]}'
+  -H "Authorization: Bearer dummy-key-for-freemaxxing" \
+  -d '{"model": "freemaxxing/auto/coding", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 **Troubleshooting**
 
-- Ensure maxout is running: `maxout status`
-- Check that maxout can access all required API keys: `maxout setup`
-- Use `maxout serve --trace` to see model routing in real-time
-- If no models show up in status, check your maxout configuration in `~/.maxout/config.json`
-- When models are exhausted, `maxout serve` shows hints with recovery commands
+- Ensure freemaxxing is running: `freemaxxing status`
+- Check that freemaxxing can access all required API keys: `freemaxxing setup`
+- Use `freemaxxing serve --trace` to see model routing in real-time
+- If no models show up in status, check your freemaxxing configuration in `~/.freemaxxing/config.json`
+- When models are exhausted, `freemaxxing serve` shows hints with recovery commands
 - The 503 error response includes a `hint` field with actionable advice
 
 **Quick Prompt for AI Agents**
-You can tell your agent: "Please install maxout globally via npm and start the server with `maxout serve`."
+You can tell your agent: "Please install freemaxxing globally via npm and start the server with `freemaxxing serve`."

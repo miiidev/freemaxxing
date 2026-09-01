@@ -1,5 +1,5 @@
 {
-  "name": "maxout",
+  "name": "freemaxxing",
   "version": "0.1.0",
   "description": "No entry fee, real winnings - every free AI model, one endpoint.",
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "bin": {
-    "maxout": "./dist/cli.js"
+    "freemaxxing": "./dist/cli.js"
   },
   "files": [
     "dist"
