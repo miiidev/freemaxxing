@@ -86,3 +86,11 @@ export interface UsageRecord {
 }
 
 export type UsageMap = Map<string, UsageRecord>;
+
+export interface ReliabilityOutcome {
+  modelId: string;
+  ts: number;
+  ok: boolean;
+  latencyMs?: number;
+  kind?: string;
+}

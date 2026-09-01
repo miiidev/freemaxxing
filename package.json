@@ -3,9 +3,15 @@
   "version": "0.1.0",
   "description": "No entry fee, real winnings - every free AI model, one endpoint.",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "bin": { "maxout": "./dist/cli.js" },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "maxout": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -14,6 +20,7 @@
     "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
+    "cli-table3": "^0.6.5",
     "fastify": "^5.2.0"
   },
   "devDependencies": {

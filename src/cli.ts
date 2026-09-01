@@ -2,6 +2,7 @@
 import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
+import Table from "cli-table3";
 import { buildServer } from "./server.js";
 import { REGISTRY, applyModelLimits, buildLocalRegistry, PROVIDERS } from "./catalog.js";
 import {
@@ -32,7 +33,7 @@ export function formatStatusRow(
   msRaw: ModelState,
   now: number,
   usage?: UsageRecord,
-): string {
+): string[] {
   const ms = effective(msRaw, now);
   let state: string;
   if (ms.state === "ok") {
@@ -55,15 +56,15 @@ export function formatStatusRow(
   }
   const usageCol = parts.length > 0 ? parts.join(" · ") : "req -";
   return [
-    e.id.padEnd(50),
+    e.id,
     `t${e.tier}`,
-    e.speed.padEnd(7),
+    e.speed,
     e.tools ? "tools" : "-",
-    String(e.context).padStart(7),
-    state.padEnd(34),
-    usageCol.padEnd(18),
+    String(e.context),
+    state,
+    usageCol,
     e.tags.join(","),
-  ].join("  ");
+  ];
 }
 
 export function formatPoolLine(
@@ -207,6 +208,16 @@ async function printStatus(): Promise<void> {
     groups.set(entry.provider, list);
   }
   const now = Date.now();
+  const table = new Table({
+    head: ["Model", "Tier", "Speed", "Tools", "Ctx", "State", "Usage", "Tags"],
+    style: { head: ["cyan"] },
+    chars: {
+      top: "─", "top-mid": "┬", "top-left": "┌", "top-right": "┐",
+      bottom: "─", "bottom-mid": "┴", "bottom-left": "└", "bottom-right": "┘",
+      left: "│", "left-mid": "├", mid: "┼", "mid-mid": "┼",
+      right: "│", "right-mid": "┤", middle: "│",
+    },
+  });
   for (const [provider, entries] of groups) {
     const caps = providerCaps[provider];
     if (caps) {
@@ -217,9 +228,11 @@ async function printStatus(): Promise<void> {
       ));
     }
     for (const entry of entries) {
-      console.log("  " + formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id)));
+      table.push(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id)));
     }
-    console.log("");
+  }
+  if (table.length > 0) {
+    console.log(table.toString());
   }
 }
 
@@ -278,6 +291,26 @@ export async function runCli(argv: string[]): Promise<number> {
     console.log(
       `maxout serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
     );
+
+    // -- Status summary + hints --
+    const states = loadState(defaultStatePath());
+    const now = Date.now();
+    const exhaustedCount = [...states.values()].filter(
+      (ms) => effective(ms, now).state === "exhausted",
+    ).length;
+    const cooldownCount = [...states.values()].filter(
+      (ms) => effective(ms, now).state === "cooldown",
+    ).length;
+    if (exhaustedCount > 0 || cooldownCount > 0) {
+      console.log("");
+      const parts: string[] = [];
+      if (exhaustedCount > 0) parts.push(`${exhaustedCount} exhausted`);
+      if (cooldownCount > 0) parts.push(`${cooldownCount} cooling`);
+      console.log(`  Note: ${parts.join(", ")}  ·  maxout status for details`);
+      if (exhaustedCount > 0) {
+        console.log(`  Fix:   maxout revive <model-id> to clear, or wait for UTC midnight reset`);
+      }
+    }
     if (providerCount === 0) {
       for (const line of noProvidersHint()) console.log(line);
     }

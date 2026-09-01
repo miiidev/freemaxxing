@@ -68,23 +68,41 @@ Keys are read from environment variables (a `.env` in `~/.maxout/` is loaded):
 Port/host are configurable in `~/.maxout/config.json`, along with quota-harvest
 settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" below).
 
+### Custom local endpoint
+
+Point to a remote or custom local endpoint (e.g. llama.cpp, a different port):
+
+    { "localBaseURL": "http://192.168.1.50:8080/v1" }
+
+This overrides the default `http://localhost:11434/v1` used by the `local` provider.
+
 ## Status
 
     npx . status
 
-Shows every model with its current limit state (`ok`, `cooldown Xm`,
-`exhausted until <UTC reset>`).
+Shows every model in a formatted table with its current limit state (`ok`,
+`cooldown Xm`, `exhausted until <UTC reset>`).
 
 Pooled providers appear once as a `[pool] …` line shared by their models;
 per-model rows carry reason codes (`cooldown 3m (peak-throttle)`,
 `exhausted (pool) until …`, `retired since …`). Clear stuck state with
 `maxout revive <model-id>` (or a bare provider name to unblock a pool).
 
+When `maxout serve` starts with models in cooldown or exhaustion, a compact
+hint is shown:
+
+    Note: 3 exhausted, 1 cooling  ·  maxout status for details
+    Fix:   maxout revive <model-id> to clear, or wait for UTC midnight reset
+
 ## Transparency
 
 Every response carries the actual serving model in its `model` field and the
 `x-maxout-served-by` header. Failover happens only before the first streamed
-byte; mid-stream failures surface as a `maxout_error` SSE frame.
+byte; mid-stream failures surface as a `maxout_error` SSE frame with an
+actionable `hint` field (e.g. `"Run: maxout revive <model-id> to clear exhaustion"`).
+
+When all models are exhausted, the 503 error response also includes a `hint`
+field with recovery instructions.
 
 ### Seeing which model answered
 
@@ -201,7 +219,7 @@ will appear in the candidate pool.
 ### How It Works
 
 - The `local` provider in `providers.json` points at `http://localhost:11434` (the
-  default Ollama address)
+  default Ollama address) — override with `"localBaseURL"` in config.json
 - Requests are forwarded to the local `/chat/completions` endpoint
 - No API key is sent to the local endpoint (maxout skips auth for local)
 - Rate limits are set to very high values (`rpd: 1M, tpd: 1M`) so local models
@@ -346,6 +364,8 @@ curl -X POST http://127.0.0.1:8787/v1/chat/completions \
 - Check that maxout can access all required API keys: `maxout setup`
 - Use `maxout serve --trace` to see model routing in real-time
 - If no models show up in status, check your maxout configuration in `~/.maxout/config.json`
+- When models are exhausted, `maxout serve` shows hints with recovery commands
+- The 503 error response includes a `hint` field with actionable advice
 
 **Quick Prompt for AI Agents**
 You can tell your agent: "Please install maxout globally via npm and start the server with `maxout serve`."

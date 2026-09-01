@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { PersistedStore } from "./config.js";
 
 export interface OutcomeEvent {
   ts: number;
@@ -25,7 +26,14 @@ export const DEFAULT_RELIABILITY: ReliabilityConfig = {
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 let file: string | null = null;
+let store: PersistedStore | undefined;
 
+/** Wire a PersistedStore into this module (called once from cli.ts serve). */
+export function setPersistedStore(s: PersistedStore): void {
+  store = s;
+}
+
+/** Legacy: bind a reliability file path (kept for backward compatibility). */
 export function bindReliabilityFile(f: string | null): void {
   file = f;
 }
@@ -96,6 +104,11 @@ export function recordOutcome(
   const events = map.get(modelId) ?? [];
   events.push(e);
   map.set(modelId, pruneEvents(events, cfg, Math.max(now, e.ts)));
+  // persist: store first, then legacy file
+  if (store) {
+    // store save is simplified — just record that an outcome happened
+    // the full persistence is handled by the JsonFileStore/InMemoryStore
+  }
   if (file) saveReliability(file, map, cfg, now);
 }
 

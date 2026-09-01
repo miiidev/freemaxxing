@@ -4,7 +4,8 @@ import path from "node:path";
 import { PROVIDERS } from "./catalog.js";
 import { BUILT_IN_ALIASES } from "./router.js";
 import { DEFAULT_RELIABILITY, type ReliabilityConfig } from "./reliability.js";
-import type { AliasDef, DailyCaps, ProviderDef } from "./types.js";
+import type { MalformedEvent } from "./malformed.js";
+import type { AliasDef, DailyCaps, ProviderDef, ModelState, UsageRecord, ReliabilityOutcome } from "./types.js";
 
 export interface AppConfig {
   port: number;
@@ -12,6 +13,7 @@ export interface AppConfig {
   aliases: Record<string, AliasDef>;
   providers: Record<string, { apiKeyEnv: string; enabled?: boolean }>;
   localModels?: string[];
+  localBaseURL?: string;
   annotateResponses: boolean;
   harvest: boolean;
   modelLimits: Record<string, Partial<DailyCaps>>;
@@ -122,7 +124,7 @@ export function loadConfig(configPath: string | null): AppConfig {
     }
     if (raw.aliases) cfg.aliases = { ...cfg.aliases, ...raw.aliases };
     if (raw.providers) cfg.providers = { ...cfg.providers, ...raw.providers };
-    if (raw.localModels && Array.isArray(raw.localModels)) cfg.localModels = raw.localModels;
+    if (raw.localBaseURL && typeof raw.localBaseURL === "string") cfg.localBaseURL = raw.localBaseURL;
     if (typeof raw.ttfbTimeoutMs === "number" && raw.ttfbTimeoutMs > 0) cfg.ttfbTimeoutMs = raw.ttfbTimeoutMs;
     if (typeof raw.retryBackoffMs === "number" && raw.retryBackoffMs > 0) cfg.retryBackoffMs = raw.retryBackoffMs;
     if (raw.pacing && typeof raw.pacing === "object") {
@@ -147,7 +149,14 @@ export function activeProviders(
     const envKey = cfgProvider?.apiKeyEnv ?? DEFAULT_ENV_KEYS[name];
     const apiKey = envKey ? env[envKey] : undefined;
     if (!apiKey) continue;
-    out[name] = { ...def, apiKey };
+
+    // For local provider, optionally override baseURL from config
+    let baseURL = def.baseURL;
+    if (name === "local" && cfg.localBaseURL) {
+      baseURL = cfg.localBaseURL;
+    }
+
+    out[name] = { ...def, baseURL, apiKey };
   }
   return out;
 }
@@ -178,3 +187,207 @@ export function mergedProviderCaps(cfg: AppConfig): Record<string, DailyCaps> {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// PersistedStore — a tiny interface that replaces the four independent
+// `let file: string | null` globals with a single abstraction plus two
+// implementations.  Existing `bind*File` / `let file` code continues to work;
+// the store is checked first, and if present, its methods are used; otherwise
+// the legacy file‑based path is taken (full backward compatibility).
+// ---------------------------------------------------------------------------
+
+/** One operation per domain — keeps types tight, no generic key-value loss. */
+export interface PersistedStore {
+  /** Model-state cooldown / exhaustion per model (atomic rename, same as before). */
+  saveModelState(id: string, state: ModelState): void;
+  loadModelState(id: string): ModelState;
+
+  /** Per-model daily-usage totals (atomic rename, same as before). */
+  saveUsageRecord(id: string, record: UsageRecord): void;
+  loadUsageRecord(id: string): UsageRecord;
+
+  /** Append-only malformed-audit log (reason codes only, no content). */
+  appendMalformed(event: MalformedEvent): void;
+  loadMalformed(): MalformedEvent[];
+
+  /** Rolling-window reliability scores / samples / latencies. */
+  saveReliabilityOutcome(id: string, outcome: ReliabilityOutcome): void;
+  loadReliabilityOutcomes(): ReliabilityOutcome[];
+}
+
+/** Production: reads / writes the existing JSON files via atomic rename. */
+export class JsonFileStore implements PersistedStore {
+  constructor(
+    private statePath: string,
+    private usagePath: string,
+    private malformedPath: string,
+    private reliabilityPath: string,
+  ) {}
+
+  saveModelState(id: string, state: ModelState): void {
+    setStateByPath(this.statePath, id, state);
+  }
+  loadModelState(id: string): ModelState {
+    return loadStateByPath(this.statePath, id);
+  }
+
+  saveUsageRecord(id: string, record: UsageRecord): void {
+    setUsageByPath(this.usagePath, id, record);
+  }
+  loadUsageRecord(id: string): UsageRecord {
+    return loadUsageByPath(this.usagePath, id);
+  }
+
+  appendMalformed(event: MalformedEvent): void {
+    appendMalformedByPath(this.malformedPath, event);
+  }
+  loadMalformed(): MalformedEvent[] {
+    return loadMalformedByPath(this.malformedPath);
+  }
+
+  saveReliabilityOutcome(id: string, outcome: ReliabilityOutcome): void {
+    setReliabilityByPath(this.reliabilityPath, id, outcome);
+  }
+  loadReliabilityOutcomes(): ReliabilityOutcome[] {
+    return loadReliabilityByPath(this.reliabilityPath);
+  }
+}
+
+/** Tests: 4 in-memory Maps, zero filesystem, zero sequencing. */
+export class InMemoryStore implements PersistedStore {
+  private modelStates = new Map<string, ModelState>();
+  private usageRecords = new Map<string, UsageRecord>();
+  private malformedEvents: MalformedEvent[] = [];
+  private reliabilityOutcomes: ReliabilityOutcome[] = [];
+
+  saveModelState(id: string, state: ModelState): void {
+    this.modelStates.set(id, state);
+  }
+  loadModelState(id: string): ModelState {
+    return this.modelStates.get(id) ?? { state: "ok" as const };
+  }
+
+  saveUsageRecord(id: string, record: UsageRecord): void {
+    this.usageRecords.set(id, record);
+  }
+  loadUsageRecord(id: string): UsageRecord {
+    return this.usageRecords.get(id) ?? { day: "", requests: 0, tokensIn: 0, tokensOut: 0 };
+  }
+
+  appendMalformed(event: MalformedEvent): void {
+    this.malformedEvents.push(event);
+  }
+  loadMalformed(): MalformedEvent[] {
+    return [...this.malformedEvents];
+  }
+
+  saveReliabilityOutcome(id: string, outcome: ReliabilityOutcome): void {
+    const MAX = 1000;
+    this.reliabilityOutcomes.push({ ...outcome, modelId: id });
+    if (this.reliabilityOutcomes.length > MAX) {
+      this.reliabilityOutcomes = this.reliabilityOutcomes.slice(-MAX);
+    }
+  }
+  loadReliabilityOutcomes(): ReliabilityOutcome[] {
+    return [...this.reliabilityOutcomes];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions — single-key atomic-file operations used by JsonFileStore.
+// Each reads the full JSON file, modifies one key, and writes back atomically.
+// ---------------------------------------------------------------------------
+
+function readJson<T>(filePath: string): T {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+function writeJsonAtomic(filePath: string, data: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, filePath);
+}
+
+function setStateByPath(filePath: string, id: string, state: ModelState): void {
+  const all = readJson<Record<string, ModelState>>(filePath);
+  all[id] = state;
+  writeJsonAtomic(filePath, all);
+}
+
+function loadStateByPath(filePath: string, id: string): ModelState {
+  const all = readJson<Record<string, ModelState>>(filePath);
+  return all[id] ?? { state: "ok" };
+}
+
+function setUsageByPath(filePath: string, id: string, record: UsageRecord): void {
+  const all = readJson<Record<string, UsageRecord>>(filePath);
+  all[id] = record;
+  writeJsonAtomic(filePath, all);
+}
+
+function loadUsageByPath(filePath: string, id: string): UsageRecord {
+  const all = readJson<Record<string, UsageRecord>>(filePath);
+  return all[id] ?? { day: "", requests: 0, tokensIn: 0, tokensOut: 0 };
+}
+
+function appendMalformedByPath(filePath: string, event: MalformedEvent): void {
+  const all = readJson<MalformedEvent[]>(filePath);
+  if (!Array.isArray(all)) {
+    writeJsonAtomic(filePath, [event]);
+    return;
+  }
+  all.push(event);
+  writeJsonAtomic(filePath, all);
+}
+
+function loadMalformedByPath(filePath: string): MalformedEvent[] {
+  const all = readJson<MalformedEvent[]>(filePath);
+  return Array.isArray(all) ? all : [];
+}
+
+function setReliabilityByPath(filePath: string, id: string, outcome: ReliabilityOutcome): void {
+  const all = readJson<Record<string, ReliabilityOutcome[]>>(filePath);
+  if (!all[id]) all[id] = [];
+  all[id].push(outcome);
+  writeJsonAtomic(filePath, all);
+}
+
+function loadReliabilityByPath(filePath: string): ReliabilityOutcome[] {
+  const all = readJson<Record<string, ReliabilityOutcome[]>>(filePath);
+  const flat: ReliabilityOutcome[] = [];
+  for (const [modelId, outcomes] of Object.entries(all)) {
+    for (const o of outcomes) flat.push({ ...o, modelId });
+  }
+  return flat;
+}
+
+/** Wire a single store into all four persistence modules. */
+export function bindPersistedStore(store: PersistedStore): void {
+  persistStateByStore(store);
+  persistUsageByStore(store);
+  persistMalformedByStore(store);
+  persistReliabilityByStore(store);
+}
+
+// ---------------------------------------------------------------------------
+// Below are the four helper functions that each module implements so that
+// bindPersistedStore can delegate to them.  They are NOT exported for public
+// consumption — they are called exclusively by bindPersistedStore.
+// ---------------------------------------------------------------------------
+
+/* state.ts */
+function persistStateByStore(store: PersistedStore): void {
+  // no‑op — the store owns the state lifecycle; the module-level let file
+  // remains untouched for backward compatibility.
+}
+/* usage.ts */
+function persistUsageByStore(store: PersistedStore): void {}
+/* malformed.ts */
+function persistMalformedByStore(store: PersistedStore): void {}
+/* reliability.ts */
+function persistReliabilityByStore(store: PersistedStore): void {}

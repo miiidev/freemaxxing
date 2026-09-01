@@ -211,13 +211,24 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
             opts.fetchImpl ?? fetch,
             out
           );
-          // Ask which local models to enable
+// Ask which local models to enable
+          if (installedModels.size === 0) {
           out("");
-          out("Available local models (Ollama/llama.cpp):");
+          out("Local models: none installed.");
+          out("Suggested models to pull:");
           LOCAL_MODEL_OPTIONS.forEach((m, i) => {
-            const status = installedModels.has(m.name) ? "✓ installed" : "✗ not installed";
-            out(`  ${i + 1}. ${m.name}  ${status}`);
+            out(`  ${i + 1}. ${m.name}: ${m.description}`);
           });
+          out("  (install via: ollama pull <name>)");
+        } else {
+          out("");
+          out(`Local models (${installedModels.size} installed):`);
+          installedModels.forEach((m, i) => {
+            const suggestion = LOCAL_MODEL_OPTIONS.find((s) => s.name === m);
+            const desc = suggestion ? suggestion.description : "";
+            out(`  ${i + 1}. ${m}${desc ? `: ${desc}` : ""}`);
+          });
+        }
           out("  0. Skip (no local models enabled)");
 
           const input = await ask(`Select models (comma-separated numbers, or 0 to skip): `);
@@ -230,10 +241,11 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
 
           const choices = input.split(",").map((s) => s.trim()).filter((s) => s !== "");
           const selected: string[] = [];
+          const modelArray = Array.from(installedModels);
           for (const choice of choices) {
             const idx = Number(choice) - 1;
-            if (idx >= 0 && idx < LOCAL_MODEL_OPTIONS.length) {
-              selected.push(LOCAL_MODEL_OPTIONS[idx].name);
+            if (idx >= 0 && idx < modelArray.length) {
+              selected.push(modelArray[idx]);
             } else {
               out(`Invalid selection: ${choice}`);
             }

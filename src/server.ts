@@ -7,7 +7,7 @@ import { validateCompletion, type ToolSpec } from "./toolcall.js";
 import { recordMalformed } from "./malformed.js";
 import { recordOutcome, type ReliabilityMap } from "./reliability.js";
 import { Readable } from "node:stream";
-import { setState } from "./state.js";
+import { setState, effective } from "./state.js";
 import { sseModelRewriter, sseAnnotator, sseUsageCapture, sseToolCallGuard } from "./sse.js";
 import type { ActiveProvider, AppConfig } from "./config.js";
 import type { AliasDef, DailyCaps, RegistryEntry, UsageMap, UsageRecord, AttemptRecord } from "./types.js";
@@ -200,11 +200,18 @@ const candidates = resolved.candidates;
     });
 
     if (!result.ok) {
+      const exhaustedCount = [...deps.stateMap.values()].filter(
+        (ms) => effective(ms, Date.now()).state === "exhausted",
+      ).length;
+      const hint = exhaustedCount > 0
+        ? `Run: maxout revive <model-id> to clear exhaustion, or wait for UTC midnight reset`
+        : `All models are cooling down - try again later, or run: maxout revive <model-id>`;
       return reply.code(503).send(
         err("all_models_exhausted", `No free model available for ${alias} right now.`, {
           attempts: result.attempts,
           skippedByBudget: resolved.skippedByBudget.map((e) => e.id),
           allExhaustedKind: classifyFailures(result.attempts),
+          hint,
         }),
       );
     }
@@ -282,7 +289,10 @@ const candidates = resolved.candidates;
         if (!reply.raw.writableEnded) {
           if (link === upstream) {
             upstreamDied = true;
-            reply.raw.write(`data: {"maxout_error":"upstream_stream_failed"}\n\n`);
+            const hint = deps.stateMap.size > 0
+              ? `Run: maxout revive <model-id> to clear exhaustion`
+              : `Run: maxout setup to add providers`;
+            reply.raw.write(`data: {"maxout_error":"upstream_stream_failed","hint":"${hint}"}\n\n`);
           }
           reply.raw.end();
         }

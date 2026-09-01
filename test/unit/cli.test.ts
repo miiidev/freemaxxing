@@ -15,36 +15,36 @@ const NOW = Date.UTC(2026, 7, 22, 12, 0, 0);
 describe("formatStatusRow", () => {
   it("renders ok state", () => {
     const row = formatStatusRow(E, { state: "ok" }, NOW);
-    expect(row).toContain("groq::llama-3.3-70b-versatile");
-    expect(row).toContain("ok");
+    expect(row.join(" ")).toContain("groq::llama-3.3-70b-versatile");
+    expect(row.join(" ")).toContain("ok");
   });
   it("renders cooldown with humanized remaining minutes", () => {
     const ms: ModelState = { state: "cooldown", until: NOW + 180_000 };
-    expect(formatStatusRow(E, ms, NOW)).toContain("cooldown 3m");
+    expect(formatStatusRow(E, ms, NOW).join(" ")).toContain("cooldown 3m");
   });
   it("renders exhausted with UTC reset time", () => {
     const ms: ModelState = { state: "exhausted", until: Date.UTC(2026, 7, 23, 0, 0, 0) };
     const row = formatStatusRow(E, ms, NOW);
-    expect(row).toContain("exhausted until 2026-08-23T00:00Z");
+    expect(row.join(" ")).toContain("exhausted until 2026-08-23T00:00Z");
   });
 });
 
 describe("reason rendering", () => {
   it("shows cooldown reason next to remaining minutes", () => {
     const ms: ModelState = { state: "cooldown", until: NOW + 180_000, reason: "peak-throttle" };
-    expect(formatStatusRow(E, ms, NOW)).toContain("cooldown 3m (peak-throttle)");
+    expect(formatStatusRow(E, ms, NOW).join(" ")).toContain("cooldown 3m (peak-throttle)");
   });
   it("defaults gracefully when reason absent (legacy snapshots)", () => {
     const ms: ModelState = { state: "cooldown", until: NOW + 60_000 };
-    expect(formatStatusRow(E, ms, NOW)).toContain("cooldown 1m");
+    expect(formatStatusRow(E, ms, NOW).join(" ")).toContain("cooldown 1m");
   });
   it("shows exhausted reason before the reset timestamp", () => {
     const ms: ModelState = { state: "exhausted", until: Date.UTC(2026, 7, 25, 0, 0, 0), reason: "pool" };
-    expect(formatStatusRow(E, ms, NOW)).toContain("exhausted (pool) until 2026-08-25T00:00Z");
+    expect(formatStatusRow(E, ms, NOW).join(" ")).toContain("exhausted (pool) until 2026-08-25T00:00Z");
   });
   it("renders retired with since timestamp", () => {
     const ms: ModelState = { state: "retired", since: Date.UTC(2026, 7, 24, 9, 30, 0) };
-    expect(formatStatusRow(E, ms, NOW)).toContain("retired since 2026-08-24T09:30Z");
+    expect(formatStatusRow(E, ms, NOW).join(" ")).toContain("retired since 2026-08-24T09:30Z");
   });
 });
 
@@ -81,20 +81,20 @@ describe("formatStatusRow usage column", () => {
   it("renders spend against caps", () => {
     const row = formatStatusRow(E2, { state: "ok" }, NOW,
       { day: "2026-08-22", requests: 12, tokensIn: 84000, tokensOut: 16000 });
-    expect(row).toContain("req 12/50");
-    expect(row).toContain("tok 100k/1M");
+    expect(row.join(" ")).toContain("req 12/50");
+    expect(row.join(" ")).toContain("tok 100k/1M");
   });
 
   it("renders dash for models without caps", () => {
-    expect(formatStatusRow(E, { state: "ok" }, NOW)).toContain("req -");
+    expect(formatStatusRow(E, { state: "ok" }, NOW).join(" ")).toContain("req -");
   });
 
   it("omits unseeded dimensions", () => {
     const half: RegistryEntry = { ...E, limits: { rpd: 50 } };
     const row = formatStatusRow(half, { state: "ok" }, NOW,
       { day: "2026-08-22", requests: 3, tokensIn: 5, tokensOut: 5 });
-    expect(row).toContain("req 3/50");
-    expect(row).not.toContain("tok");
+    expect(row.join(" ")).toContain("req 3/50");
+    expect(row.join(" ")).not.toContain("tok");
   });
 });
 

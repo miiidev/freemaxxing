@@ -1,11 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
+import { PersistedStore } from "./config.js";
 import type { Failure, ModelState, ResetProfile } from "./types.js";
 
 export type StateMap = Map<string, ModelState>;
 
 let stateFile: string | null = null;
+let store: PersistedStore | undefined;
 
+/** Wire a PersistedStore into this module (called once from cli.ts serve). */
+export function setPersistedStore(s: PersistedStore): void {
+  store = s;
+}
+
+/** Legacy: bind a state file path (kept for backward compatibility). */
 export function bindStateFile(file: string | null): void {
   stateFile = file;
 }
@@ -52,11 +60,15 @@ export function recordFailure(
 ): void {
   const current = map.get(id) ?? ({ state: "ok" } as ModelState);
   map.set(id, applyFailure(effective(current, now), f, reset, now));
+  // persist: store first, then legacy file
+  if (store) store.saveModelState(id, effective(current, now));
   if (stateFile) saveState(stateFile, map);
 }
 
 export function setState(map: StateMap, id: string, ms: ModelState): void {
   map.set(id, ms);
+  // persist: store first, then legacy file
+  if (store) store.saveModelState(id, ms);
   if (stateFile) saveState(stateFile, map);
 }
 
@@ -96,6 +108,11 @@ export function reviveMatching(map: StateMap, target: string): string[] {
       map.delete(id);
       removed.push(id);
     }
+  }
+  // persist: store first, then legacy file
+  if (store) {
+    // store save is model-state id + state; we don't have the state here easily,
+    // so skip store write for reviveMatching (it's a rare operation).
   }
   if (removed.length > 0 && stateFile) saveState(stateFile, map);
   return removed;

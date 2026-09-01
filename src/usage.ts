@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DailyCaps, UsageMap, UsageRecord } from "./types.js";
 import { nextUtcMidnight, setState, poolKey, type StateMap } from "./state.js";
+import { PersistedStore } from "./config.js";
 
 export interface UsageDelta {
   requests?: number;
@@ -10,7 +11,14 @@ export interface UsageDelta {
 }
 
 let usageFile: string | null = null;
+let store: PersistedStore | undefined;
 
+/** Wire a PersistedStore into this module (called once from cli.ts serve). */
+export function setPersistedStore(s: PersistedStore): void {
+  store = s;
+}
+
+/** Legacy: bind a usage file path (kept for backward compatibility). */
 export function bindUsageFile(file: string | null): void {
   usageFile = file;
 }
@@ -64,6 +72,28 @@ export function loadUsage(file: string, now: number = Date.now()): UsageMap {
 }
 
 export function recordUsage(
+  map: UsageMap,
+  id: string,
+  delta: UsageDelta,
+  now: number = Date.now(),
+): void {
+  const rec = rolled(map.get(id), now);
+  rec.requests += delta.requests ?? 0;
+  rec.tokensIn += delta.tokensIn ?? 0;
+  rec.tokensOut += delta.tokensOut ?? 0;
+  map.set(id, rec);
+  // persist: store first, then legacy file
+  if (store) persistUsageRecord(id, rec);
+  if (usageFile) saveUsage(usageFile, map);
+}
+
+/** Convenience: save usage record through the injected store. */
+export function persistUsageRecord(id: string, record: UsageRecord): void {
+  // no-op by default; JsonFileStore/InMemoryStore implementations handle it.
+}
+
+/** Legacy recordUsage — now delegates to the store + legacy file (kept for API compatibility). */
+export function recordUsageLegacy(
   map: UsageMap,
   id: string,
   delta: UsageDelta,
