@@ -194,6 +194,16 @@ async function printStatus(): Promise<void> {
     for (const line of noProvidersHint()) console.log(line);
     return;
   }
+  // Show enabled/disabled providers
+  const enabledNames = Object.keys(providers);
+  const disabledNames = disabledProviders;
+  console.log("");
+  if (enabledNames.length > 0) {
+    console.log(`  Enabled: ${enabledNames.join(", ")}`);
+  }
+  if (disabledNames.length > 0) {
+    console.log(`  Disabled: ${disabledNames.join(", ")}`);
+  }
   console.log("");
   const providerCaps = mergedProviderCaps(cfg);
   const groups = new Map<string, RegistryEntry[]>();
