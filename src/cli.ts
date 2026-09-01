@@ -237,7 +237,7 @@ async function printStatus(): Promise<void> {
 
 export async function runCli(argv: string[]): Promise<number> {
   const cmd = argv[0] ?? "serve";
-
+  const allProviders = Object.keys(PROVIDERS);
   if (cmd === "status") {
     if (argv.includes("--reliability")) {
       await printReliabilityTable();
@@ -395,7 +395,30 @@ export async function runCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stderr.write("usage: freemaxxing [serve|status|setup|export-stats|revive]\n");
+  if (cmd === "providers") {
+    const cfg = loadConfig(defaultConfigPath());
+    let env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
+    const providers = activeProviders(cfg, env);
+    const enabledNames = Object.keys(providers);
+    const disabledNames = allProviders.filter(
+      (p) => !enabledNames.includes(p),
+    );
+    console.log("Enabled providers:");
+    if (enabledNames.length > 0) {
+      console.log(`  ${enabledNames.join(", ")}`);
+    } else {
+      console.log("  (none)");
+    }
+    console.log("Disabled providers:");
+    if (disabledNames.length > 0) {
+      console.log(`  ${disabledNames.join(", ")}`);
+    } else {
+      console.log("  (none)");
+    }
+    return 0;
+  }
+
+  process.stderr.write("usage: freemaxxing [serve|status|setup|export-stats|revive|providers]\n");
   return 64;
 }
 
