@@ -2,7 +2,7 @@
 
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
-Maxout is a local OpenAI-compatible proxy that pools curated **free-tier AI
+Freemaxxing is a local OpenAI-compatible proxy that pools curated **free-tier AI
 models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras, **and local
 LLMs via Ollama/llama.cpp**) behind stable aliases. When one model hits its rate
 limit, your request transparently fails over to the next-best free model (or
@@ -106,7 +106,7 @@ field with recovery instructions.
 
 ### Seeing which model answered
 
-By default Maxout appends a credit line to every text reply so you can see
+By default Freemaxxing appends a credit line to every text reply so you can see
 which model actually served your request:
 
 ```
@@ -120,7 +120,7 @@ Disable it by setting `"annotateResponses": false` in `~/.freemaxxing/config.jso
 
 ## Tool-call validation
 
-For tool-carrying requests Maxout validates tool-call payloads before your
+For tool-carrying requests Freemaxxing validates tool-call payloads before your
 agent sees them: broken or truncated calls fail over silently before the first
 byte (non-streaming), or surface as a `{"freemaxxing_error":"malformed_tool_call"}`
 SSE frame at stream end. Every rejection is logged locally as a reason code
@@ -128,7 +128,7 @@ SSE frame at stream end. Every rejection is logged locally as a reason code
 
 ## Reliability
 
-Maxout tracks how each model actually behaves for you (validation results,
+Freemaxxing tracks how each model actually behaves for you (validation results,
 truncations, latency) in a rolling local window and demotes proven-flaky
 models beneath their static tier. See the numbers:
 
@@ -141,7 +141,7 @@ when asked:
 
 ## Quota harvest
 
-Maxout tracks how much of each model's free-tier daily allowance you have spent
+Freemaxxing tracks how much of each model's free-tier daily allowance you have spent
 (today, UTC) and uses it in routing:
 
 - same-tier candidates are tried least-used first, so no single model burns out by noon;
@@ -163,7 +163,7 @@ estimate otherwise.
 
 ## Local LLM Support
 
-Maxout can route requests to a **local LLM** running via [Ollama](https://ollama.ai/)
+Freemaxxing can route requests to a **local LLM** running via [Ollama](https://ollama.ai/)
 or [llama.cpp], configured to listen on `http://localhost:11434` by default.
 
 ### Setup
@@ -238,10 +238,10 @@ will appear in the candidate pool.
 - To **disable** local support, just remove the `local` entry from
   `~/.freemaxxing/.env` and re-run `freemaxxing serve`.
 
-Maxout is deliberately boring about your data:
+Freemaxxing is deliberately boring about your data:
 
 - Your API keys live only in your environment (or `%USERPROFILE%\.freemaxxing\.env`)
-  and go directly to the provider you called. Maxout has no telemetry, no
+  and go directly to the provider you called. Freemaxxing has no telemetry, no
   phoning home, and no third party in the middle — requests leave your machine
   straight for OpenRouter/Groq/Google/Mistral/Cerebras.
 - Prompt and response bodies are never written to disk. What IS stored locally
@@ -260,7 +260,7 @@ Maxout is deliberately boring about your data:
 
 ## Integration with AI Coding Assistants
 
-Maxout can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate freemaxxing with popular AI coding assistants:
+Freemaxxing can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate freemaxxing with popular AI coding assistants:
 
 ### opencode
 
@@ -278,16 +278,16 @@ In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config
 {
   "provider": {
     "freemaxxing": {
-      "name": "Maxout",
+      "name": "Freemaxxing",
       "api": "openai",
       "options": {
         "baseURL": "http://127.0.0.1:8787/v1",
         "apiKey": "sk-noop"
       },
       "models": {
-        "auto/coding": { "name": "Maxout: best free coding model", "tool_call": true },
-        "auto/fast": { "name": "Maxout: fastest free model", "tool_call": true },
-        "auto/any": { "name": "Maxout: any free model", "tool_call": true }
+        "auto/coding": { "name": "Freemaxxing: best free coding model", "tool_call": true },
+        "auto/fast": { "name": "Freemaxxing: fastest free model", "tool_call": true },
+        "auto/any": { "name": "Freemaxxing: any free model", "tool_call": true }
       }
     }
   },
@@ -316,7 +316,7 @@ Any tool that speaks OpenAI's API can use freemaxxing by pointing it to the loca
 **Cursor**
 ```json
 {
-  "name": "Maxout Proxy",
+  "name": "Freemaxxing Proxy",
   "endpoint": "http://127.0.0.1:8787/v1",
   "apiKey": "dummy-key-for-freemaxxing",
   "model": "freemaxxing/auto/coding"
