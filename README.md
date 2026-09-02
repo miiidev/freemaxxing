@@ -1,6 +1,6 @@
 # freemaxxing
 
-![Freemaxxing Logo](src/assets/logo.jpg)
+![Freemaxxing Logo](src/assets/logo.png)
 
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
