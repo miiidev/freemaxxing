@@ -1,11 +1,11 @@
 # freemaxxing
 
-![Freemaxxing Logo](logo.jpg)
+![Freemaxxing Logo](src/assets/logo.jpg)
 
 *No entry fee, real winnings — every free AI model, one endpoint.*
 
 <div align="center">
-  <img src="banner.jpg" alt="Freemaxxing banner" width="600"/>
+  <img src="src/assets/banner.jpg" alt="Freemaxxing banner" width="600"/>
 </div>
 
 Freemaxxing is a local OpenAI-compatible proxy that pools curated **free-tier AI
