@@ -29,7 +29,7 @@ export interface AppConfig {
 }
 
 export interface ActiveProvider extends ProviderDef {
-  apiKey: string;
+  apiKey?: string;
 }
 
 const DEFAULT_ENV_KEYS: Record<string, string> = {
@@ -146,9 +146,11 @@ export function activeProviders(
     const enabled = cfgProvider?.enabled ?? def.enabled ?? true;
     if (!enabled) continue; // skip disabled providers
 
+    // Skip API key check for local provider (auth: none)
+    const isLocal = def.auth !== "bearer";
     const envKey = cfgProvider?.apiKeyEnv ?? DEFAULT_ENV_KEYS[name];
-    const apiKey = envKey ? env[envKey] : undefined;
-    if (!apiKey) continue;
+    const apiKey = isLocal ? undefined : (envKey ? env[envKey] : undefined);
+    if (!isLocal && !apiKey) continue;
 
     // For local provider, optionally override baseURL from config
     let baseURL = def.baseURL;
@@ -156,7 +158,7 @@ export function activeProviders(
       baseURL = cfg.localBaseURL;
     }
 
-    out[name] = { ...def, baseURL, apiKey };
+    out[name] = { ...def, baseURL };
   }
   return out;
 }

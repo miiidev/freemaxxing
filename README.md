@@ -1,6 +1,12 @@
 # freemaxxing
 
+![Freemaxxing Logo](logo.jpg)
+
 *No entry fee, real winnings — every free AI model, one endpoint.*
+
+<div align="center">
+  <img src="banner.jpg" alt="Freemaxxing banner" width="600"/>
+</div>
 
 Freemaxxing is a local OpenAI-compatible proxy that pools curated **free-tier AI
 models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras, **and local
@@ -8,77 +14,89 @@ LLMs via Ollama/llama.cpp**) behind stable aliases. When one model hits its rate
 limit, your request transparently fails over to the next-best free model (or
 local model if configured).
 
-## Quickstart
+Think of it as a **playlist for free AI models** — pick the one that fits your
+mood, your context window, and your rate limit, and let freemaxxing handle the
+failover so you don't have to.
 
-    git clone <this-repo>
-    cd freemaxxing
-    npm install
-    npm start
+---
+
+## ✨ Quickstart
+
+```bash
+git clone <this-repo>
+cd freemaxxing
+npm install
+npm start
+```
 
 That's it — if no API keys are configured yet, the setup wizard launches
 automatically before the server starts. It recommends a **single** provider
 (Groq — fast signup, generous free tier), opens the key page, validates your
-key with a live call, and stores it in `%USERPROFILE%\.freemaxxing\.env`. When at
-least one key is saved the server starts immediately; adding more providers
-later is optional bonus capacity.
+key with a live call, and stores it in `~/.freemaxxing/.env`. When at least
+one key is saved the server starts immediately; adding more providers later is
+optional bonus capacity.
 
 You can also configure a **local LLM** (Ollama/llama.cpp) as a no-rate-limit
 fallback — see "Local LLM Support" below.
 
-No clone? The package is npx-ready:
+**No clone?** The package is npx-ready:
 
-    npx github:<owner>/freemaxxing
+```bash
+npx github:<owner>/freemaxxing
+```
 
-Scripted equivalent (CI, dotfiles):
+---
 
-    npx . setup --provider groq --key gsk_...
-
-Then point any OpenAI-compatible tool at the server:
-
-    base URL: http://127.0.0.1:8787/v1
-    API key:  anything (freemaxxing does not check client keys)
-    model:    auto/coding | auto/fast | auto/any
-
-Prefer manual setup? Re-run `freemaxxing setup` anytime, or set any subset of these
-as environment variables (a `.env` in `~/.freemaxxing/` is loaded):
-`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
-`CEREBRAS_API_KEY`, `LOCAL_API_KEY`.
-
-> Warning: in PowerShell, plain `set NAME=value` does **not** create an
-> environment variable — use `$env:NAME = value`.
-
-## Aliases
+## 🛠️ Aliases
 
 | Alias | Meaning |
 |---|---|
-| auto/coding | best coding-capable free models (tier-ranked, tools required) |
-| auto/fast   | fastest available models first |
-| auto/any    | everything, quality-ranked |
+| `auto/coding` | best coding-capable free models (tier-ranked, tools required) |
+| `auto/fast`   | fastest available models first |
+| `auto/any`    | everything, quality-ranked |
 
 Define custom aliases in `~/.freemaxxing/config.json`:
 
-    { "aliases": { "auto/long": { "tags": ["long-context"], "requireTools": false } } }
+```json
+{ "aliases": { "auto/long": { "tags": ["long-context"], "requireTools": false } } }
+```
 
-## Configuration
+---
+
+## ⚙️ Configuration
 
 Keys are read from environment variables (a `.env` in `~/.freemaxxing/` is loaded):
-`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`,
-`CEREBRAS_API_KEY`, `LOCAL_API_KEY`. Providers without keys are skipped.
-(`GITHUB_TOKEN` is accepted but inert: GitHub Models was retired in July 2026 — see docs/registry-notes.md.)
-Port/host are configurable in `~/.freemaxxing/config.json`, along with quota-harvest
-settings (`harvest`, `modelLimits`, `providerLimits` — see "Quota harvest" below).
+
+```
+OPENROUTER_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY,
+CEREBRAS_API_KEY, LOCAL_API_KEY
+```
+
+Providers without keys are skipped. (`GITHUB_TOKEN` is accepted but inert:
+GitHub Models was retired in July 2026 — see docs/registry-notes.md.)
+
+Port/host are configurable in `~/.freemaxxing/config.json`, along with
+quota-harvest settings (`harvest`, `modelLimits`, `providerLimits` — see
+"Quota harvest" below).
 
 ### Custom local endpoint
 
 Point to a remote or custom local endpoint (e.g. llama.cpp, a different port):
 
-    { "localBaseURL": "http://192.168.1.50:8080/v1" }
+```json
+{ "localBaseURL": "http://192.168.1.50:8080/v1" }
+```
 
-This overrides the default `http://localhost:11434/v1` used by the `local` provider.
+This overrides the default `http://localhost:11434/v1` used by the `local`
+provider.
 
-## Status
+---
 
-    npx . status
+## 📊 Status
+
+```bash
+npx . status
+```
 
 Shows every model in a formatted table with its current limit state (`ok`,
 `cooldown Xm`, `exhausted until <UTC reset>`).
@@ -88,37 +106,44 @@ per-model rows carry reason codes (`cooldown 3m (peak-throttle)`,
 `exhausted (pool) until …`, `retired since …`). Clear stuck state with
 `freemaxxing revive <model-id>` (or a bare provider name to unblock a pool).
 
-When `freemaxxing serve` starts with models in cooldown or exhaustion, a compact
-hint is shown:
+When `freemaxxing serve` starts with models in cooldown or exhaustion, a
+compact hint is shown:
 
-    Note: 3 exhausted, 1 cooling  ·  freemaxxing status for details
-    Fix:   freemaxxing revive <model-id> to clear, or wait for UTC midnight reset
+> **Note:** 3 exhausted, 1 cooling · freemaxxing status for details  
+> **Fix:** freemaxxing revive <model-id> to clear, or wait for UTC midnight reset
 
-## Transparency
+---
+
+## 🔍 Transparency
 
 Every response carries the actual serving model in its `model` field and the
-`x-freemaxxing-served-by` header. Failover happens only before the first streamed
-byte; mid-stream failures surface as a `freemaxxing_error` SSE frame with an
-actionable `hint` field (e.g. `"Run: freemaxxing revive <model-id> to clear exhaustion"`).
+`x-freemaxxing-served-by` header. Failover happens only before the first
+streamed byte; mid-stream failures surface as a `freemaxxing_error` SSE frame
+with an actionable `hint` field (e.g. `"Run: freemaxxing revive
+<model-id> to clear exhaustion"`).
 
 When all models are exhausted, the 503 error response also includes a `hint`
 field with recovery instructions.
 
 ### Seeing which model answered
 
-By default Freemaxxing appends a credit line to every text reply so you can see
-which model actually served your request:
+By default Freemaxxing appends a credit line to every text reply so you can
+see which model actually served your request:
 
 ```
 <normal reply>
 
 ---
+
 *freemaxxing: groq::openai/gpt-oss-120b*
 ```
 
-Disable it by setting `"annotateResponses": false` in `~/.freemaxxing/config.json`.
+Disable it by setting `"annotateResponses": false` in
+`~/.freemaxxing/config.json`.
 
-## Tool-call validation
+---
+
+## 🛡️ Tool-call validation
 
 For tool-carrying requests Freemaxxing validates tool-call payloads before your
 agent sees them: broken or truncated calls fail over silently before the first
@@ -126,49 +151,66 @@ byte (non-streaming), or surface as a `{"freemaxxing_error":"malformed_tool_call
 SSE frame at stream end. Every rejection is logged locally as a reason code
 (`~/.freemaxxing/malformed.jsonl`) — never the response content.
 
-## Reliability
+---
+
+## 📈 Reliability
 
 Freemaxxing tracks how each model actually behaves for you (validation results,
 truncations, latency) in a rolling local window and demotes proven-flaky
 models beneath their static tier. See the numbers:
 
-    npx . status --reliability
+```bash
+npx . status --reliability
+```
 
 Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
 when asked:
 
-    npx . export-stats --out freemaxxing-stats.json
+```bash
+npx . export-stats --out freemaxxing-stats.json
+```
 
-## Quota harvest
+---
 
-Freemaxxing tracks how much of each model's free-tier daily allowance you have spent
-(today, UTC) and uses it in routing:
+## 💰 Quota harvest
 
-- same-tier candidates are tried least-used first, so no single model burns out by noon;
-- models whose remaining daily budget cannot fit your request are skipped without a wasted call;
-- provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day) are respected across all their models;
+Freemaxxing tracks how much of each model's free-tier daily allowance you have
+spent (today, UTC) and uses it in routing:
+
+- same-tier candidates are tried least-used first, so no single model burns out
+  by noon;
+- models whose remaining daily budget cannot fit your request are skipped
+  without a wasted call;
+- provider-wide pools (e.g. OpenRouter's account-level 50 free requests/day)
+  are respected across all their models;
 - a model that hits its cap is parked until the UTC reset, exactly like a 429 would.
 
 Spend shows up in `freemaxxing status` (`req 12/50 · tok 84k/1M` per model, plus
-`pool 3/1000` for provider-wide pools). Caps come from
-curated seeds in `registry.json`/`providers.json`; override or extend them per
-model or provider in `~/.freemaxxing/config.json`:
+`pool 3/1000` for provider-wide pools). Caps come from curated seeds in
+`registry.json`/`providers.json`; override or extend them per model or provider
+in `~/.freemaxxing/config.json`:
 
-    { "harvest": false,                       // revert to v0 routing entirely
-      "modelLimits":   { "google::gemini-2.5-pro": { "rpd": 100 } },
-      "providerLimits": { "openrouter": { "rpd": 1000 } } }
+```json
+{ "harvest": false,                       // revert to v0 routing entirely
+  "modelLimits":   { "google::gemini-2.5-pro": { "rpd": 100 } },
+  "providerLimits": { "openrouter": { "rpd": 1000 } } }
+```
 
 Token counts use provider-reported usage when available and an input-size
 estimate otherwise.
 
-## Local LLM Support
+---
+
+## 🤖 Local LLM Support
 
 Freemaxxing can route requests to a **local LLM** running via [Ollama](https://ollama.ai/)
 or [llama.cpp], configured to listen on `http://localhost:11434` by default.
 
 ### Setup
 
-1. **Install Ollama** (or [llama.cpp](https://github.com/ggerardym/llama.cpp)) and pull a model:
+1. **Install Ollama** (or [llama.cpp](https://github.com/ggerardym/llama.cpp))
+   and pull a model:
+
    ```bash
    # Ollama
    ollama pull llama3.2:latest
@@ -178,6 +220,7 @@ or [llama.cpp], configured to listen on `http://localhost:11434` by default.
    ```
 
 2. **Run the freemaxxing setup wizard** and select **local** as a provider:
+
    ```bash
    freemaxxing setup
    # → Select "local" from the provider list [1-6]
@@ -186,11 +229,13 @@ or [llama.cpp], configured to listen on `http://localhost:11434` by default.
    ```
 
    Or run non-interactively:
+
    ```bash
    freemaxxing setup --provider local --key local
    ```
 
 3. **Verify the local provider is active**:
+
    ```bash
    freemaxxing status
    # → You should see `[pool] local    req 0/1000000 · ok · resets 00:00 UTC`
@@ -216,10 +261,12 @@ echo "Hello" | freemaxxing chat --model local::llama3.2:latest
 Or use aliases like `auto/any` — if the local provider is active, its models
 will appear in the candidate pool.
 
-### How It Works
+---
 
-- The `local` provider in `providers.json` points at `http://localhost:11434` (the
-  default Ollama address) — override with `"localBaseURL"` in config.json
+## 🏗️ How It Works
+
+- The `local` provider in `providers.json` points at `http://localhost:11434`
+  (the default Ollama address) — override with `"localBaseURL"` in config.json
 - Requests are forwarded to the local `/chat/completions` endpoint
 - No API key is sent to the local endpoint (freemaxxing skips auth for local)
 - Rate limits are set to very high values (`rpd: 1M, tpd: 1M`) so local models
@@ -232,9 +279,9 @@ will appear in the candidate pool.
 
 - **Best use case**: "If all cloud free-tier models are exhausted/cooling down,
   finish my request with a local model instead of erroring."
-- **Not recommended as primary**: Local models don't have the same quality/consistency
-  guarantees as cloud free tiers, and they count against no rate limit — use them
-  as a fallthrough, not your everyday model.
+- **Not recommended as primary**: Local models don't have the same quality/
+  consistency guarantees as cloud free tiers, and they count against no rate
+  limit — use them as a fallthrough, not your everyday model.
 - To **disable** local support, just remove the `local` entry from
   `~/.freemaxxing/.env` and re-run `freemaxxing serve`.
 
@@ -249,18 +296,26 @@ Freemaxxing is deliberately boring about your data:
   health states (`state.json`), quality outcomes as numbers (`reliability.json`),
   rejection reason codes (`malformed.jsonl`), and console lines naming which
   model answered.
-- `freemaxxing export-stats` is the ONLY feature that produces shareable data. It
-  runs solely when you invoke it and emits an allowlisted, anonymized summary
+- `freemaxxing export-stats` is the ONLY feature that produces shareable data.
+  It runs solely when you invoke it and emits an allowlisted, anonymized summary
   (see above). Nothing is sent anywhere unless you send it.
 
-## Development
+---
 
-    npm test          # vitest, fully offline (upstreams mocked)
-    npm run build     # strict TypeScript -> dist/
+## 👩‍💻 Development
 
-## Integration with AI Coding Assistants
+```bash
+npm test          # vitest, fully offline (upstreams mocked)
+npm run build     # strict TypeScript -> dist/
+```
 
-Freemaxxing can serve as a proxy for free-tier AI models, enabling various AI tools to access curated pools of free models. Here's how to integrate freemaxxing with popular AI coding assistants:
+---
+
+## 🤖 Integration with AI Coding Assistants
+
+Freemaxxing can serve as a proxy for free-tier AI models, enabling various AI
+tools to access curated pools of free models. Here's how to integrate
+freemaxxing with popular AI coding assistants:
 
 ### opencode
 
@@ -272,7 +327,9 @@ cd freemaxxing
 npm start          # Start freemaxxing server on http://127.0.0.1:8787/v1
 ```
 
-In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`), add the provider:
+In your global opencode config
+(`~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`),
+add the provider:
 
 ```json
 {
@@ -303,17 +360,21 @@ In your global opencode config (`~/.config/opencode/opencode.json` or `~/.config
 
 ### Other OpenAI-Compatible Tools
 
-Any tool that speaks OpenAI's API can use freemaxxing by pointing it to the local proxy:
+Any tool that speaks OpenAI's API can use freemaxxing by pointing it to the
+local proxy:
 
 #### General Configuration
 
-    base URL: http://127.0.0.1:8787/v1
-    API key: anything (freemaxxing does not check client keys)
-    model: auto/coding | auto/fast | auto/any
+```
+base URL: http://127.0.0.1:8787/v1
+API key: anything (freemaxxing does not check client keys)
+model: auto/coding | auto/fast | auto/any
+```
 
 #### Examples
 
 **Cursor**
+
 ```json
 {
   "name": "Freemaxxing Proxy",
@@ -324,24 +385,29 @@ Any tool that speaks OpenAI's API can use freemaxxing by pointing it to the loca
 ```
 
 **Cline**
+
 - Set `API_ENDPOINT` to `http://127.0.0.1:8787/v1`
 - Set `API_KEY` to `dummy-key-for-freemaxxing`
 - Set `MODEL` to `freemaxxing/auto/coding`
 
 **RooCode**
+
 - OpenAI-compatible endpoint: `http://127.0.0.1:8787/v1`
 - Use any model name (freemaxxing handles aliasing internally)
 
 **Claude Code**
+
 - Configure to use OpenAI-compatible endpoint
 - Base URL: `http://127.0.0.1:8787/v1`
 - Model: `freemaxxing/auto/coding`
 
 **Continue**
+
 - Set `openAiHost` to `http://127.0.0.1:8787/v1`
 - Any OpenAI-compatible model name works (e.g., `freemaxxing/auto/coding`)
 
 **OpenHands**
+
 ```yaml
 ai:
   provider: "openai"
@@ -351,6 +417,7 @@ ai:
 ```
 
 **Any HTTP Client**
+
 ```bash
 curl -X POST http://127.0.0.1:8787/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -358,14 +425,51 @@ curl -X POST http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model": "freemaxxing/auto/coding", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-**Troubleshooting**
+---
+
+## 🛠️ Troubleshooting
 
 - Ensure freemaxxing is running: `freemaxxing status`
 - Check that freemaxxing can access all required API keys: `freemaxxing setup`
 - Use `freemaxxing serve --trace` to see model routing in real-time
-- If no models show up in status, check your freemaxxing configuration in `~/.freemaxxing/config.json`
-- When models are exhausted, `freemaxxing serve` shows hints with recovery commands
+- If no models show up in status, check your freemaxxing configuration in
+  `~/.freemaxxing/config.json`
+- When models are exhausted, `freemaxxing serve` shows hints with recovery
+  commands
 - The 503 error response includes a `hint` field with actionable advice
 
+### Quick Prompt for AI Agents
+
+You can tell your agent:
+> "Please install freemaxxing globally via npm and start the server with
+> `freemaxxing serve`."
+
+---
+
+<details>
+<summary><b>💡 Pro tip</b>: Want to quickly test a model without touching your config?</summary>
+You can set a key env variable just for this session:
+
+**PowerShell:** `$env:GROQ_API_KEY = "gsk_..."`  
+**cmd.exe:** `set GROQ_API_KEY=gsk_...`  
+**Note:** In PowerShell, `set NAME=value` does NOT create a persistent env var —
+use `$env:NAME = value` for the current session only.
+</details>
+
+---
+
+<details>
+<summary><b>🎯 Pro tip</b>: Using aliases effectively?</summary>
+The `auto/coding` alias ranks models by tier and tool support — great for coding
+tasks. `auto/fast` prioritizes speed. `auto/any` includes everything quality-ranked.
+Swap them based on whether you need speed or smarts for your current task.
+</details>
+
+---
+
 **Quick Prompt for AI Agents**
-You can tell your agent: "Please install freemaxxing globally via npm and start the server with `freemaxxing serve`."
+
+You can tell your agent: "Please install freemaxxing globally via npm and start
+the server with `freemaxxing serve`."
+
+---

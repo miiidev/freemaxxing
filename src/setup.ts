@@ -211,24 +211,30 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
             opts.fetchImpl ?? fetch,
             out
           );
-// Ask which local models to enable
-          if (installedModels.size === 0) {
-          out("");
-          out("Local models: none installed.");
-          out("Suggested models to pull:");
-          LOCAL_MODEL_OPTIONS.forEach((m, i) => {
-            out(`  ${i + 1}. ${m.name}: ${m.description}`);
-          });
-          out("  (install via: ollama pull <name>)");
-        } else {
-          out("");
-          out(`Local models (${installedModels.size} installed):`);
-          installedModels.forEach((m, i) => {
-            const suggestion = LOCAL_MODEL_OPTIONS.find((s) => s.name === m);
-            const desc = suggestion ? suggestion.description : "";
-            out(`  ${i + 1}. ${m}${desc ? `: ${desc}` : ""}`);
-          });
-        }
+out("");
+          const allOptions: LocalModelConfig[] = [];
+          const installHint: string[] = [];
+          if (installedModels.size > 0) {
+            out("Local models detected:");
+            for (const m of installedModels) {
+              const suggestion = LOCAL_MODEL_OPTIONS.find((s) => s.name === m);
+              const idx = allOptions.length + 1;
+              allOptions.push({ name: m, description: suggestion?.description ?? `(${m})` });
+              out(`  ${idx}. ${m}${suggestion ? `: ${suggestion.description}` : ""}`);
+            }
+            installHint.push("already installed");
+          }
+          if (LOCAL_MODEL_OPTIONS.length > 0) {
+            if (allOptions.length > 0) out("");
+            out("Available to pull & enable:");
+            for (const opt of LOCAL_MODEL_OPTIONS) {
+              if (installedModels.has(opt.name)) continue;
+              const idx = allOptions.length + 1;
+              allOptions.push(opt);
+              out(`  ${idx}. ${opt.name}: ${opt.description}`);
+            }
+            installHint.push("will be pulled automatically");
+          }
           out("  0. Skip (no local models enabled)");
 
           const input = await ask(`Select models (comma-separated numbers, or 0 to skip): `);
@@ -241,11 +247,10 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
 
           const choices = input.split(",").map((s) => s.trim()).filter((s) => s !== "");
           const selected: string[] = [];
-          const modelArray = Array.from(installedModels);
           for (const choice of choices) {
             const idx = Number(choice) - 1;
-            if (idx >= 0 && idx < modelArray.length) {
-              selected.push(modelArray[idx]);
+            if (idx >= 0 && idx < allOptions.length) {
+              selected.push(allOptions[idx].name);
             } else {
               out(`Invalid selection: ${choice}`);
             }

@@ -2,7 +2,7 @@
 import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
-import Table from "cli-table3";
+import { Table } from "console-table-printer";
 import { buildServer } from "./server.js";
 import { REGISTRY, applyModelLimits, buildLocalRegistry, PROVIDERS } from "./catalog.js";
 import {
@@ -207,15 +207,9 @@ async function printStatus(): Promise<void> {
     groups.set(entry.provider, list);
   }
   const now = Date.now();
+  const colNames = ["Model", "Tier", "Speed", "Tools", "Ctx", "State", "Usage", "Tags"];
   const table = new Table({
-    head: ["Model", "Tier", "Speed", "Tools", "Ctx", "State", "Usage", "Tags"],
-    style: { head: ["cyan"] },
-    chars: {
-      top: "─", "top-mid": "┬", "top-left": "┌", "top-right": "┐",
-      bottom: "─", "bottom-mid": "┴", "bottom-left": "└", "bottom-right": "┘",
-      left: "│", "left-mid": "├", mid: "┼", "mid-mid": "┼",
-      right: "│", "right-mid": "┤", middle: "│",
-    },
+    columns: colNames.map((n) => ({ name: n, alignment: n === "Ctx" ? "right" as const : "left" as const })),
   });
   for (const [provider, entries] of groups) {
     const caps = providerCaps[provider];
@@ -227,12 +221,13 @@ async function printStatus(): Promise<void> {
       ));
     }
     for (const entry of entries) {
-      table.push(formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id)));
+      const values = formatStatusRow(entry, states.get(entry.id) ?? { state: "ok" }, now, usageMap.get(entry.id));
+      const row: Record<string, string> = {};
+      colNames.forEach((n, i) => { row[n] = values[i]; });
+      table.addRow(row);
     }
   }
-  if (table.length > 0) {
-    console.log(table.toString());
-  }
+  console.log(table.render());
 }
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -283,12 +278,9 @@ export async function runCli(argv: string[]): Promise<number> {
     });
     await app.listen({ port: cfg.port, host: cfg.host });
     const providerCount = Object.keys(providers).length;
-    const registryProviderCount = new Set([
-      ...applyModelLimits(REGISTRY, cfg.modelLimits).map((e) => e.provider),
-      ...(cfg.localModels ?? []).length > 0 ? ["local"] : [],
-    ]).size;
+    const totalProviders = Object.keys(PROVIDERS).length;
     console.log(
-      `freemaxxing serving ${providerCount}/${registryProviderCount} providers on http://${cfg.host}:${cfg.port}/v1`,
+      `freemaxxing serving ${providerCount}/${totalProviders} providers on http://${cfg.host}:${cfg.port}/v1`,
     );
 
     // -- Status summary + hints --
@@ -397,24 +389,29 @@ export async function runCli(argv: string[]): Promise<number> {
 
   if (cmd === "providers") {
     const cfg = loadConfig(defaultConfigPath());
-    let env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
-    const providers = activeProviders(cfg, env);
-    const enabledNames = Object.keys(providers);
-    const disabledNames = allProviders.filter(
-      (p) => !enabledNames.includes(p),
-    );
-    console.log("Enabled providers:");
-    if (enabledNames.length > 0) {
-      console.log(`  ${enabledNames.join(", ")}`);
-    } else {
-      console.log("  (none)");
+    const env = loadEnv(defaultEnvPath(), process.env as Record<string, string | undefined>);
+    const act = activeProviders(cfg, env);
+    const table = new Table({
+      columns: [
+        { name: "Provider", alignment: "left" },
+        { name: "Status", alignment: "left" },
+        { name: "API Key", alignment: "center" },
+      ],
+    });
+    for (const name of allProviders.sort()) {
+      const def = PROVIDERS[name];
+      const cfgProvider = cfg.providers[name];
+      const enabled = cfgProvider?.enabled ?? def.enabled ?? true;
+      if (!enabled) {
+        table.addRow({ Provider: name, Status: "disabled", "API Key": "—" });
+      } else if (act[name]) {
+        const isLocal = def.auth !== "bearer";
+        table.addRow({ Provider: name, Status: "enabled", "API Key": isLocal ? "✓" : "✓" });
+      } else {
+        table.addRow({ Provider: name, Status: "enabled (no key)", "API Key": "✗" });
+      }
     }
-    console.log("Disabled providers:");
-    if (disabledNames.length > 0) {
-      console.log(`  ${disabledNames.join(", ")}`);
-    } else {
-      console.log("  (none)");
-    }
+    console.log(table.render());
     return 0;
   }
 

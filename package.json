@@ -20,7 +20,7 @@
     "prepublishOnly": "npm test && npm run build"
   },
   "dependencies": {
-    "cli-table3": "^0.6.5",
+    "console-table-printer": "^2.16.1",
     "fastify": "^5.2.0"
   },
   "devDependencies": {
