@@ -61,9 +61,11 @@ describe("loadConfig", () => {
 describe("activeProviders", () => {
   it("skips keyless providers, attaches key when present", () => {
     const act = activeProviders(loadConfig(null), { GROQ_API_KEY: "sk-groq" });
-    expect(Object.keys(act)).toEqual(["groq"]);
+    expect(Object.keys(act)).toEqual(["groq", "local"]);
     expect(act["groq"].apiKey).toBe("sk-groq");
     expect(act["groq"].baseURL).toBe(PROVIDERS["groq"].baseURL);
+    expect(act["local"]).toBeDefined();
+    expect(act["local"].auth).not.toBe("bearer");
   });
 });
 

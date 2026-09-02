@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PROVIDERS } from "./catalog.js";
@@ -29,7 +29,7 @@ export interface AppConfig {
 }
 
 export interface ActiveProvider extends ProviderDef {
-  apiKey?: string;
+  apiKey: string;
 }
 
 const DEFAULT_ENV_KEYS: Record<string, string> = {
@@ -146,11 +146,9 @@ export function activeProviders(
     const enabled = cfgProvider?.enabled ?? def.enabled ?? true;
     if (!enabled) continue; // skip disabled providers
 
-    // Skip API key check for local provider (auth: none)
-    const isLocal = def.auth !== "bearer";
     const envKey = cfgProvider?.apiKeyEnv ?? DEFAULT_ENV_KEYS[name];
-    const apiKey = isLocal ? undefined : (envKey ? env[envKey] : undefined);
-    if (!isLocal && !apiKey) continue;
+    const apiKey = envKey ? env[envKey] : undefined;
+    if (!apiKey) continue;
 
     // For local provider, optionally override baseURL from config
     let baseURL = def.baseURL;
@@ -191,14 +189,14 @@ export function mergedProviderCaps(cfg: AppConfig): Record<string, DailyCaps> {
 }
 
 // ---------------------------------------------------------------------------
-// PersistedStore — a tiny interface that replaces the four independent
+// PersistedStore ΓÇö a tiny interface that replaces the four independent
 // `let file: string | null` globals with a single abstraction plus two
 // implementations.  Existing `bind*File` / `let file` code continues to work;
 // the store is checked first, and if present, its methods are used; otherwise
-// the legacy file‑based path is taken (full backward compatibility).
+// the legacy fileΓÇæbased path is taken (full backward compatibility).
 // ---------------------------------------------------------------------------
 
-/** One operation per domain — keeps types tight, no generic key-value loss. */
+/** One operation per domain ΓÇö keeps types tight, no generic key-value loss. */
 export interface PersistedStore {
   /** Model-state cooldown / exhaustion per model (atomic rename, same as before). */
   saveModelState(id: string, state: ModelState): void;
@@ -296,7 +294,7 @@ export class InMemoryStore implements PersistedStore {
 }
 
 // ---------------------------------------------------------------------------
-// Helper functions — single-key atomic-file operations used by JsonFileStore.
+// Helper functions ΓÇö single-key atomic-file operations used by JsonFileStore.
 // Each reads the full JSON file, modifies one key, and writes back atomically.
 // ---------------------------------------------------------------------------
 
@@ -379,12 +377,12 @@ export function bindPersistedStore(store: PersistedStore): void {
 // ---------------------------------------------------------------------------
 // Below are the four helper functions that each module implements so that
 // bindPersistedStore can delegate to them.  They are NOT exported for public
-// consumption — they are called exclusively by bindPersistedStore.
+// consumption ΓÇö they are called exclusively by bindPersistedStore.
 // ---------------------------------------------------------------------------
 
 /* state.ts */
 function persistStateByStore(store: PersistedStore): void {
-  // no‑op — the store owns the state lifecycle; the module-level let file
+  // noΓÇæop ΓÇö the store owns the state lifecycle; the module-level let file
   // remains untouched for backward compatibility.
 }
 /* usage.ts */
