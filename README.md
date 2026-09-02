@@ -1,12 +1,10 @@
 # freemaxxing
 
-![Freemaxxing Logo](src/assets/logo.png)
-
-*No entry fee, real winnings — every free AI model, one endpoint.*
-
 <div align="center">
   <img src="src/assets/banner.jpg" alt="Freemaxxing banner" width="600"/>
 </div>
+
+*No entry fee, real winnings — every free AI model, one endpoint.*
 
 Freemaxxing is a local OpenAI-compatible proxy that pools curated **free-tier AI
 models** (OpenRouter, Groq, Google AI Studio, Mistral, Cerebras, **and local
