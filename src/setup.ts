@@ -195,6 +195,9 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
 
     const collect = async (provider: SetupProvider): Promise<boolean> => {
       out("", `Opening ${provider.signupUrl ?? provider.baseURL}`, "(paste an API key when you have one)");
+      if (provider.name === "openrouter") {
+        out("Tip: If you've spent $10+ on OpenRouter, you get 1000 free requests/day instead of 50.");
+      }
       try {
         opts.openImpl?.(provider.signupUrl ?? provider.baseURL);
       } catch {
@@ -304,6 +307,27 @@ out("");
         if (verdict.ok) {
           await saveEnv(opts.envPath, provider, key);
           out(`saved ${provider.envVar}`);
+
+          // OpenRouter: ask about paid tier (1000 req/day instead of 50)
+          if (provider.name === "openrouter" && opts.interactive) {
+            const paid = (await ask(`Have you spent $10+ on OpenRouter? (boosts limit to 1000 req/day) [y/N]: `)).toLowerCase();
+            if (paid === "y") {
+              const configPath = path.join(os.homedir(), ".freemaxxing", "config.json");
+              let config: any = {};
+              if (fsSync.existsSync(configPath)) {
+                try {
+                  config = JSON.parse(await fs.readFile(configPath, "utf8"));
+                } catch {
+                  config = {};
+                }
+              }
+              if (!config.providerLimits) config.providerLimits = {};
+              config.providerLimits.openrouter = { rpd: 1000 };
+              await fs.writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
+              out("Set OpenRouter limit to 1000 requests/day in config.");
+            }
+          }
+
           return true;
         }
         out(`attempt ${attempt}/3: ${verdict.detail}`);
