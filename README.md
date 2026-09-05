@@ -20,11 +20,17 @@ failover so you don't have to.
 
 ## ✨ Quickstart
 
+**Easiest (global install):**
+
 ```bash
-git clone <this-repo>
-cd freemaxxing
-npm install
-npm start
+npm install -g freemaxxing
+freemaxxing serve
+```
+
+**No install (run directly):**
+
+```bash
+npx freemaxxing serve
 ```
 
 That's it — if no API keys are configured yet, the setup wizard launches
@@ -36,12 +42,6 @@ optional bonus capacity.
 
 You can also configure a **local LLM** (Ollama/llama.cpp) as a no-rate-limit
 fallback — see "Local LLM Support" below.
-
-**No clone?** The package is npx-ready:
-
-```bash
-npx github:<owner>/freemaxxing
-```
 
 ---
 
@@ -93,7 +93,7 @@ provider.
 ## 📊 Status
 
 ```bash
-npx . status
+freemaxxing status
 ```
 
 Shows every model in a formatted table with its current limit state (`ok`,
@@ -158,14 +158,14 @@ truncations, latency) in a rolling local window and demotes proven-flaky
 models beneath their static tier. See the numbers:
 
 ```bash
-npx . status --reliability
+freemaxxing status --reliability
 ```
 
 Share an anonymized snapshot (model ids, rates, sample counts — nothing else)
 when asked:
 
 ```bash
-npx . export-stats --out freemaxxing-stats.json
+freemaxxing export-stats --out freemaxxing-stats.json
 ```
 
 ---
